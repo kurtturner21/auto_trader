@@ -3,5 +3,4 @@
 *.dat
 *.json
 *.pyc
-*.json
-DATA/stocks_lists_test.json
+data_bk/*

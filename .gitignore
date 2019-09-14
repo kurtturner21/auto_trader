@@ -1,6 +1,5 @@
 *.csv
 *.zip
 *.dat
-*.json
 *.pyc
-data_bk/*
+data/*

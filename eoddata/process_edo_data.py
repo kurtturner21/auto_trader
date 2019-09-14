@@ -43,8 +43,6 @@ def build_stock_histories():
                             }})
         os.remove(hist_file)
         print(hist_file, exchange, date_code, stocks_found)
-        if f_ct > 1000: 
-            break
 
 
 def write_row_to_file(row_list, header_list, data_file):

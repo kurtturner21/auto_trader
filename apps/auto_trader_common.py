@@ -23,20 +23,9 @@ E,08-Jan-2014,47.74,47.9,47,47,327600
 E,09-Jan-2014,47.55,47.59,46.91,46.99,123700"""
 
 
-def define_stock_price_bucket(org_close):
-    st_close = float(org_close)
-    if st_close < 1:
-        return 'penny'
-    elif st_close < 5:
-        return 'dollar'
-    elif st_close < 10:
-        return 'deca'
-    elif st_close < 50:
-        return 'half'
-    elif st_close < 100:
-        return 'franklin'
-    else:
-        return 'large'
+#####
+# file based methods
+#####
 
 
 def define_stock_hist_path(sk):
@@ -98,6 +87,25 @@ def stock_data_file_load():
     return stocks
 
 
+def test_stock_data_file_save(stocks):
+    with open(DATA_PATH_TEST, 'w') as fo:
+        json.dump(stocks, fo, sort_keys=True, indent=4)
+    print('Stocks saved:', len(stocks))
+
+
+def test_stock_data_file_load():
+    stocks = {}
+    if os.path.isfile(DATA_PATH_TEST):
+        with open(DATA_PATH_TEST, "r") as fi:
+            stocks = json.load(fi)
+    print('Stocks loaded:', len(stocks))
+    return stocks
+
+
+#####
+# other methods
+#####
+
 def get_highest_historial_price(days, historical_path):
     """
     input:
@@ -138,4 +146,19 @@ def get_highest_historial_price(days, historical_path):
         'highest_price_date': highest_price_date,
         }
 
+
+def define_stock_price_bucket(org_close):
+    st_close = float(org_close)
+    if st_close < 1:
+        return 'penny'
+    elif st_close < 5:
+        return 'dollar'
+    elif st_close < 10:
+        return 'deca'
+    elif st_close < 50:
+        return 'half'
+    elif st_close < 100:
+        return 'franklin'
+    else:
+        return 'large'
 

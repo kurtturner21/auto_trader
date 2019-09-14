@@ -4,3 +4,5 @@
 eoddata/data_files/symbols/AMEX.txt
 eoddata/data_files/symbols/NASDAQ.txt
 eoddata/data_files/symbols/NYSE.txt
+*.dat
+DATA/stocks_lists.json

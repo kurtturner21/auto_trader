@@ -7,6 +7,8 @@ SYMBOL_PATH = os.path.join('data_files', 'symbols')
 HISTORY_PRICE_PATH = os.path.join('data_files', 'historicals')
 HISTORY_PRICE_PROCESSED_LIST_PATH = os.path.join('..', 'DATA', 'historicals', 'processed_dates.dat')
 DATA_PATH = os.path.join('..', 'DATA', 'stocks_lists.json')
+MAX_DAYS_TO_PROCESS = 100
+TESTING = False
 
 stocks = {}
 history_price_processed = set()
@@ -16,24 +18,45 @@ def build_stock_histories():
     global stocks
     global history_price_processed
     for f_ct, f_name in enumerate(os.listdir(HISTORY_PRICE_PATH)):
+        """ if the max days is reached, then exit the loop """
+        if f_ct >= MAX_DAYS_TO_PROCESS:
+            print('MAX_DAYS_TO_PROCESS value reached:' + str(MAX_DAYS_TO_PROCESS))
+            break
         exchange, date_code = f_name.split('.')[0].split('_')
         hist_file = os.path.join(HISTORY_PRICE_PATH, f_name)
         stocks_found = 0
-        if not f_name in history_price_processed:
+        if TESTING:
+            print('next file: ' + hist_file)
+        if f_name not in history_price_processed:
+            """ If the downloaded file is in the history processed file, then skip it and delete. """
             history_price_processed.add(f_name)
             with open(hist_file, 'r') as csvfile:
+                if TESTING:
+                    print('found non dup: ' + hist_file)    
                 dict_reader = csv.DictReader(csvfile, delimiter=',')
-                for data_row in dict_reader:
+                for dr_ct, data_row in enumerate(dict_reader):
+                    stocks_found += 1
                     sk = data_row['Symbol']
                     sk_hist_path = define_stock_hist_path(sk)
-                    if f_ct < 1:
-                        make_dir_if_not_exists(sk_hist_path)
-                    write_row_to_file([
-                        data_row['Symbol'], data_row['Date'], data_row['Open'], data_row['High'],
-                        data_row['Low'], data_row['Close'], data_row['Volume']
-                        ], ['Symbol','Date','Open','High','Low','Close','Volume'], 
-                        sk_hist_path)
-                    stocks_found += 1
+                    make_dir_if_not_exists(sk_hist_path)
+                    if not TESTING:
+                        write_row_to_file([
+                            data_row['Symbol'], data_row['Date'], data_row['Open'], data_row['High'],
+                            data_row['Low'], data_row['Close'], data_row['Volume']
+                            ], ['Symbol','Date','Open','High','Low','Close','Volume'], 
+                            sk_hist_path)
+                    # elif not os.path.isfile(sk_hist_path) and dr_ct < 10 and TESTING:
+                    #     print([
+                    #         data_row['Symbol'], data_row['Date'], data_row['Open'], data_row['High'],
+                    #         data_row['Low'], data_row['Close'], data_row['Volume']
+                    #         ], ['Symbol','Date','Open','High','Low','Close','Volume'], 
+                    #         sk_hist_path, os.path.isfile(sk_hist_path))
+                    # elif dr_ct < 10 and TESTING:
+                    #     print([
+                    #         data_row['Symbol'], data_row['Date'], data_row['Open'], data_row['High'],
+                    #         data_row['Low'], data_row['Close'], data_row['Volume']
+                    #         ], ['Symbol','Date','Open','High','Low','Close','Volume'], 
+                    #         sk_hist_path, os.path.isfile(sk_hist_path), stocks_found)
                     if sk not in stocks:
                         stocks.update({data_row['Symbol']: {
                             'Description': '',
@@ -41,8 +64,11 @@ def build_stock_histories():
                             'Historicals': sk_hist_path,
                             'price_bucket': ''
                             }})
-        os.remove(hist_file)
         print(hist_file, exchange, date_code, stocks_found)
+        if stocks_found > 0:
+            if TESTING:
+                print('removing file:' + f_name + ' which has ' + str(stocks_found) + ' stocks found.')
+            os.remove(hist_file)
 
 
 def write_row_to_file(row_list, header_list, data_file):
@@ -52,9 +78,12 @@ def write_row_to_file(row_list, header_list, data_file):
             new_list.append(str(li))
         return new_list
     fDE = os.path.isfile(data_file)
-    with open(data_file, 'a') as fo:
-        if not fDE:
+    if not fDE:
+        if  TESTING:
+            print('Writing out new stock file: ' + data_file)
+        with open(data_file, 'w') as fo:
             fo.write(','.join(make_list_string(header_list)) + '\n')
+    with open(data_file, 'a') as fo:
         fo.write(','.join(make_list_string(row_list)) + '\n')
 
             
@@ -148,8 +177,9 @@ def main():
     process_stock_list()
     build_stock_histories()
 
-    save_data_file()
-    save_history_dates_processed()
+    if not TESTING:
+        save_data_file()
+        save_history_dates_processed()
 
   
 if __name__== "__main__":

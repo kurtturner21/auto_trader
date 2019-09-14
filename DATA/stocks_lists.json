@@ -1397,6 +1397,12 @@
         "Historicals_path": "..\\DATA\\historicals\\a\\ahl-d.csv",
         "price_bucket": ""
     },
+    "AHL-E": {
+        "Description": "",
+        "Exchange": "NYSE",
+        "Historicals": "..\\DATA\\historicals\\a\\ahl-e.csv",
+        "price_bucket": ""
+    },
     "AHP": {
         "Description": "",
         "Exchange": "NYSE",
@@ -1521,6 +1527,12 @@
         "Description": "Ai Powered International Equity ETF",
         "Exchange": "AMEX",
         "Historicals_path": "..\\DATA\\historicals\\a\\aiiq.csv",
+        "price_bucket": ""
+    },
+    "AIM": {
+        "Description": "",
+        "Exchange": "AMEX",
+        "Historicals": "..\\DATA\\historicals\\a\\aim.csv",
         "price_bucket": ""
     },
     "AIMC": {
@@ -6981,6 +6993,12 @@
         "Description": "Blackrock New York Muni Income Trust",
         "Exchange": "NYSE",
         "Historicals_path": "..\\DATA\\historicals\\b\\bse.csv",
+        "price_bucket": ""
+    },
+    "BSEP": {
+        "Description": "",
+        "Exchange": "AMEX",
+        "Historicals": "..\\DATA\\historicals\\b\\bsep.csv",
         "price_bucket": ""
     },
     "BSET": {
@@ -15087,6 +15105,12 @@
         "Description": "Ecolab Inc",
         "Exchange": "NYSE",
         "Historicals_path": "..\\DATA\\historicals\\e\\ecl.csv",
+        "price_bucket": ""
+    },
+    "ECLN": {
+        "Description": "",
+        "Exchange": "AMEX",
+        "Historicals": "..\\DATA\\historicals\\e\\ecln.csv",
         "price_bucket": ""
     },
     "ECNS": {
@@ -35471,6 +35495,12 @@
         "Historicals_path": "..\\DATA\\historicals\\n\\nee-n.csv",
         "price_bucket": ""
     },
+    "NEE-O": {
+        "Description": "",
+        "Exchange": "NYSE",
+        "Historicals": "..\\DATA\\historicals\\n\\nee-o.csv",
+        "price_bucket": ""
+    },
     "NEE-Q": {
         "Description": "",
         "Exchange": "NYSE",
@@ -35571,6 +35601,12 @@
         "Description": "National Energy Services Reunited Corp WT",
         "Exchange": "NASDAQ",
         "Historicals_path": "..\\DATA\\historicals\\n\\nesrw.csv",
+        "price_bucket": ""
+    },
+    "NET": {
+        "Description": "",
+        "Exchange": "NYSE",
+        "Historicals": "..\\DATA\\historicals\\n\\net.csv",
         "price_bucket": ""
     },
     "NETE": {
@@ -36555,6 +36591,12 @@
         "Description": "New Residential Investment Corp Fxdfr Prf Perpet",
         "Exchange": "NYSE",
         "Historicals_path": "..\\DATA\\historicals\\n\\nrz-a.csv",
+        "price_bucket": ""
+    },
+    "NRZ-B": {
+        "Description": "",
+        "Exchange": "NYSE",
+        "Historicals": "..\\DATA\\historicals\\n\\nrz-b.csv",
         "price_bucket": ""
     },
     "NS": {
@@ -39989,10 +40031,22 @@
         "Historicals_path": "..\\DATA\\historicals\\p\\pi.csv",
         "price_bucket": ""
     },
+    "PIC": {
+        "Description": "",
+        "Exchange": "NYSE",
+        "Historicals": "..\\DATA\\historicals\\p\\pic.csv",
+        "price_bucket": ""
+    },
     "PIC.U": {
         "Description": "Pivotal Investment Corporation II",
         "Exchange": "NYSE",
         "Historicals_path": "..\\DATA\\historicals\\p\\pic.u.csv",
+        "price_bucket": ""
+    },
+    "PIC.W": {
+        "Description": "",
+        "Exchange": "NYSE",
+        "Historicals": "..\\DATA\\historicals\\p\\pic.w.csv",
         "price_bucket": ""
     },
     "PICB": {
@@ -41337,6 +41391,12 @@
         "Description": "Prospect Capital Cp",
         "Exchange": "NASDAQ",
         "Historicals_path": "..\\DATA\\historicals\\p\\psec.csv",
+        "price_bucket": ""
+    },
+    "PSEP": {
+        "Description": "",
+        "Exchange": "AMEX",
+        "Historicals": "..\\DATA\\historicals\\p\\psep.csv",
         "price_bucket": ""
     },
     "PSET": {
@@ -45485,6 +45545,18 @@
         "Historicals_path": "..\\DATA\\historicals\\s\\scp.u.csv",
         "price_bucket": ""
     },
+    "SCP.W": {
+        "Description": "",
+        "Exchange": "NYSE",
+        "Historicals": "..\\DATA\\historicals\\s\\scp.w.csv",
+        "price_bucket": ""
+    },
+    "SCPE": {
+        "Description": "",
+        "Exchange": "NYSE",
+        "Historicals": "..\\DATA\\historicals\\s\\scpe.csv",
+        "price_bucket": ""
+    },
     "SCPH": {
         "Description": "SC Pharmaceuticals Inc",
         "Exchange": "NASDAQ",
@@ -45513,6 +45585,12 @@
         "Description": "",
         "Exchange": "AMEX",
         "Historicals": "..\\DATA\\historicals\\s\\scto.csv",
+        "price_bucket": ""
+    },
+    "SCU": {
+        "Description": "",
+        "Exchange": "NYSE",
+        "Historicals": "..\\DATA\\historicals\\s\\scu.csv",
         "price_bucket": ""
     },
     "SCVL": {
@@ -47351,6 +47429,12 @@
         "Historicals_path": "..\\DATA\\historicals\\s\\sol.csv",
         "price_bucket": ""
     },
+    "SOLN": {
+        "Description": "",
+        "Exchange": "NYSE",
+        "Historicals": "..\\DATA\\historicals\\s\\soln.csv",
+        "price_bucket": ""
+    },
     "SOLO": {
         "Description": "Electrameccanica Vehs Corp",
         "Exchange": "NASDAQ",
@@ -48711,6 +48795,12 @@
         "Description": "Spirit of Texas Bancshares Inc",
         "Exchange": "NASDAQ",
         "Historicals_path": "..\\DATA\\historicals\\s\\stxb.csv",
+        "price_bucket": ""
+    },
+    "STXS": {
+        "Description": "",
+        "Exchange": "AMEX",
+        "Historicals": "..\\DATA\\historicals\\s\\stxs.csv",
         "price_bucket": ""
     },
     "STZ": {
@@ -52277,6 +52367,12 @@
         "Historicals_path": "..\\DATA\\historicals\\u\\uht.csv",
         "price_bucket": ""
     },
+    "UI": {
+        "Description": "",
+        "Exchange": "NYSE",
+        "Historicals": "..\\DATA\\historicals\\u\\ui.csv",
+        "price_bucket": ""
+    },
     "UIHC": {
         "Description": "United Insurance Hld",
         "Exchange": "NASDAQ",
@@ -52791,6 +52887,12 @@
         "Description": "U S Energy Corp",
         "Exchange": "NASDAQ",
         "Historicals_path": "..\\DATA\\historicals\\u\\useg.csv",
+        "price_bucket": ""
+    },
+    "USEP": {
+        "Description": "",
+        "Exchange": "AMEX",
+        "Historicals": "..\\DATA\\historicals\\u\\usep.csv",
         "price_bucket": ""
     },
     "USEQ": {
@@ -53427,6 +53529,12 @@
         "Description": "Global Agriculture Prod Ishares MSCI ETF",
         "Exchange": "AMEX",
         "Historicals_path": "..\\DATA\\historicals\\v\\vegi.csv",
+        "price_bucket": ""
+    },
+    "VEGN": {
+        "Description": "",
+        "Exchange": "AMEX",
+        "Historicals": "..\\DATA\\historicals\\v\\vegn.csv",
         "price_bucket": ""
     },
     "VEON": {
@@ -54093,6 +54201,12 @@
         "Description": "Midcap Value ETF Vanguard",
         "Exchange": "AMEX",
         "Historicals_path": "..\\DATA\\historicals\\v\\voe.csv",
+        "price_bucket": ""
+    },
+    "VOLT": {
+        "Description": "",
+        "Exchange": "AMEX",
+        "Historicals": "..\\DATA\\historicals\\v\\volt.csv",
         "price_bucket": ""
     },
     "VONE": {

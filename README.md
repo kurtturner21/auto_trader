@@ -1,7 +1,8 @@
 # auto_trader
-
  
 ## Daily processing steps
+
+### Pull Down New Data
 
 1. Manually download stock data from http://eoddata.com/download.aspx for AMEX, NYSE & NASDAQ in csv format and save it to \dev\auto_trader\eoddata\data_files\historicals\.
 2. Open command prompt and chdir to \dev\auto_trader\eoddata
@@ -26,6 +27,21 @@ data_files\historicals\AMEX_20190821.csv AMEX 20190821 2213
 data_files\historicals\AMEX_20190822.csv AMEX 20190822 2214
 ```
 
-### Note
+Time will take about 5 minutes.
+
+### Populate price_bucket and some other status
+
+Still in the command prompt, run this command.
+
+```dos
+C:\dev\auto_trader\apps>python edo_populate_price_bucket.py
+```
+
+This populates price_bucket, Historcials_file_exists, datecode_first, datecode_last, datecode_last_close & datecode_count in the stocks_list.json from the individual stock histories file.
+
+Time will take about 5 minutes. 
+
+#### Note
 
 - The app has a feature to filter out duplicate data files.  The goal is to prevent duplicate dates getting into the stock CSV files.
+- There exists STOCKS with no histories files.  Bug maybe?

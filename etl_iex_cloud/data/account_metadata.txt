@@ -1,9 +1,0 @@
-{
-    "circuitBreaker": 0,
-    "effectiveDate": 1618359278381,
-    "messageLimit": 513850,
-    "messagesUsed": 0,
-    "payAsYouGoEnabled": false,
-    "subscriptionTermType": "ulnnaa",
-    "tierName": "strta"
-}

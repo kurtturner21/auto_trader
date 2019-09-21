@@ -8,6 +8,8 @@ from datetime import datetime
 
 APP_BASE = os.path.join('c:' + os.sep, 'dev', 'auto_trader')
 DATA_FILES_BASE = os.path.join('c:' + os.sep, 'auto_trader_data')
+APP_CONFIG_DIR = os.path.join('c:' + os.sep, 'dev', 'auto_trader', 'etc')
+APP_KILL_FILE = os.path.join('c:' + os.sep, 'dev', 'auto_trader', 'etc', 'delete_me_to_stop_app.kill_file.txt')
 
 ### EOD data files
 DOWNLOADED_HISTORY_PRICE_PATH = os.path.join(DATA_FILES_BASE, 'eod_data_files', 'downloaded')
@@ -77,7 +79,7 @@ def iex_load_tokens():
     return iex_tokens
 
 
-def iex_account_metadata():
+def iex_account_metadata_display():
     iex_tokens = iex_load_tokens()
     end_point = '/account/metadata'
     r_url = IEX_URL_BASE_PROD + end_point + '?token=' + iex_tokens['production_secret']
@@ -86,17 +88,93 @@ def iex_account_metadata():
         account_data = json.loads(r.text)
         with open(IEX_ACCOUNT_METADATA, 'w') as fo:
             fo.write(json.dumps(account_data, indent=4, sort_keys=True))
-        print(account_data)
+        messagesUsed = int(account_data['messagesUsed'])
+        messageLimit = int(account_data['messageLimit'])
+        messageRemain = messageLimit - messagesUsed
+        print('IEX digits     messageLimit: {0:<12}  messagesUsed: {1:<12}  messageRemain: {2:<12}'.format(
+            messageLimit, messagesUsed, messageRemain
+        ))
     except:
         print(r.text)
 
 
-def iex_stock_company_get_info(sk_symbol, contact_iex=True):
+def iex_stock_key_facts_fix(key_facts):
+    if 'peRatio' not in key_facts:
+        key_facts.update({'peRatio': 0.0})
+    if key_facts['peRatio'] in ['', 'None', None]:
+        key_facts.update({'peRatio': 0.0})
+    if 'dividendYield' not in key_facts:
+        key_facts.update({'dividendYield': 0.0})
+    if key_facts['dividendYield'] in ['', 'None', None]:
+        key_facts.update({'dividendYield': 0.0})
+    else:
+        key_facts.update({'dividendYield': round(float(key_facts['dividendYield']), 4)})
+    return key_facts
+
+
+
+def iex_stock_get_key_facts(sk_symbol):
+    global idx_unknown_symbols
+    api_call = False
+    if sk_symbol in idx_unknown_symbols:
+        return {'data': {}, 'file_path': '', 'api_call': False, 'unknown_symbol': True}
+    key_fact_data_path = define_stock_iex_key_facts(sk_symbol)
+    make_dir_if_not_exists(key_fact_data_path)
+    if not os.path.isfile(key_fact_data_path):
+        api_call = True
+        iex_tokens = iex_load_tokens()
+        end_point = '/stock/{0}/stats'.format(sk_symbol)
+        r_url = IEX_URL_BASE_PROD + end_point + '?token=' + iex_tokens['production_secret']
+        r = requests.get(r_url)
+        key_facts = {}
+        try:
+            key_facts = json.loads(r.text)
+            key_facts = iex_stock_key_facts_fix(key_facts)
+            with open(key_fact_data_path, 'w') as fo:
+                fo.write(json.dumps(key_facts, indent=4, sort_keys=True))
+        except:
+            if 'Unknown symbol' in r.text:
+                iex_unknown_symbols_add(sk_symbol)
+            print(r.text)
+    else:
+        with open(key_fact_data_path, "r") as fi:
+            key_facts = json.load(fi)
+            key_facts = iex_stock_key_facts_fix(key_facts)
+    return {
+        'data': key_facts,
+        'file_path': key_fact_data_path,
+        'api_call': api_call,
+        'unknown_symbol': False
+        }
+
+
+def iex_stock_company_fix_info(company_data):
+    if 'employees' not in company_data:
+        company_data.update({'employees': 0})
+    if not company_data['employees']:
+        company_data['employees'] = 0
+    if 'tags' not in company_data:
+        company_data.update({'tags': []})
+    if 'industry' not in company_data:
+        company_data.update({'industry': ''})
+    if 'sector' not in company_data:
+        company_data.update({'sector': ''})
+    if 'issueType' not in company_data:
+        company_data.update({'issueType': ''})
+    if 'country' not in company_data:
+        company_data.update({'country': ''})
+    if not company_data['country']:
+        company_data.update({'country': ''})
+    return company_data
+
+
+def iex_stock_company_get_info(sk_symbol):
     global idx_unknown_symbols
     api_call = False
     if sk_symbol in idx_unknown_symbols:
         return {'data': {}, 'file_path': '', 'api_call': False, 'unknown_symbol': True}
     company_data_path = define_stock_iex_company_info(sk_symbol)
+    ### fixing data
     make_dir_if_not_exists(company_data_path)
     if not os.path.isfile(company_data_path):
         api_call = True
@@ -107,6 +185,7 @@ def iex_stock_company_get_info(sk_symbol, contact_iex=True):
         company_data = {}
         try:
             company_data = json.loads(r.text)
+            company_data = iex_stock_company_fix_info(company_data)
             with open(company_data_path, 'w') as fo:
                 fo.write(json.dumps(company_data, indent=4, sort_keys=True))
         except:
@@ -116,12 +195,23 @@ def iex_stock_company_get_info(sk_symbol, contact_iex=True):
     else:
         with open(company_data_path, "r") as fi:
             company_data = json.load(fi)
+        company_data = iex_stock_company_fix_info(company_data)
     return {
         'data': company_data,
         'file_path': company_data_path,
         'api_call': api_call,
         'unknown_symbol': False
         }
+
+
+# def iex_stock_news_get(sk_symbol):
+#     ### NOT FINISHED
+#     global idx_unknown_symbols
+#     api_call = False
+#     if sk_symbol in idx_unknown_symbols:
+#         return {'data': {}, 'file_path': '', 'api_call': False, 'unknown_symbol': True}
+#     news_path = define_stock_iex_news(sk_symbol)
+#     make_dir_if_not_exists(news_path)
 
 
 def iex_unknown_symbols_add(sk_symbol):
@@ -142,9 +232,54 @@ def iex_unknown_symbols_load():
     print('IEX unknown loaded:', len(idx_unknown_symbols))
 
 
+def iex_issue_type_code(issue_type):
+    """refers to the common issue type of the stock."""
+    ### An ADR stock or ADS is a foreign stock that allows U.S. investors to trade its shares on a U.S. exchange.
+    if issue_type == 'ad':
+        return 'American Depository Receipt (ADR\'s)'
+    ### Equity REITs is the most common form of enterprise. These entities buy, own and manage income-producing real estate. Revenues come primarily through rents and not from the reselling of the portfolio properties. Mortgage REITs, also known as mREITs, lend money to real estate owners and operators
+    elif issue_type == 're':
+        return 'Real Estate Investment Trust (REIT\'s)'
+    elif issue_type == 'ce':
+        return 'Closed end fund (Stock and Bond Fund)'
+    ### There are two types of secondary offerings. A non-dilutive secondary offering is a sale of securities in which one or more major stockholders in a company sell all or a large portion of their holdings. ... Meanwhile, a dilutive secondary offering involves creating new shares and offering them for public sale.
+    elif issue_type == 'si':
+        return 'Secondary Issue'
+    elif issue_type == 'lp':
+        return 'Limited Partnerships'
+    elif issue_type == 'cs':
+        return 'Common Stock'
+    ###An exchange-traded fund (ETF) is a collection of securities—such as stocks—that tracks an underlying index. The best-known example is the SPDR S&P 500 ETF (SPY), which tracks the S&P 500 Index. ETFs can contain many types of investments, including stocks, commodities, bonds, or a mixture of investment types. An exchange-traded fund is a marketable security, meaning it has an associated price that allows it to be easily bought and sold.
+    elif issue_type == 'et':
+        return 'Exchange Traded Fund (ETF)'
+    elif issue_type == 'wt':
+        return 'Warrant'
+    elif issue_type == 'rt':
+        return 'Right'
+    else:
+        return 'Not-Mapped'
+
+
 #####
 # date time methods
 #####
+
+
+def find_hours_since_epoch(object_data, object_field):
+    if object_field not in object_data:
+        return -1
+    elif object_data[object_field] == '':
+        return -1
+    elif object_field in object_data:
+        epoch_now = float(datetime.now().timestamp())
+        try:
+            return round(float(epoch_now - float(object_data[object_field]))/60/60, 6)
+        except:
+            print("FAIL, find_hours_since_epoch: ", object_data, object_field)
+            sys.exit(20)
+    else:
+        return -1
+
 
 def generate_effective_epoch():
     return datetime.timestamp(datetime.now())
@@ -157,6 +292,32 @@ def generate_effective_string():
 #####
 # file based methods
 #####
+
+
+def kill_file_touch():
+    make_dir_if_not_exists(APP_KILL_FILE)
+    if not os.path.isfile(APP_KILL_FILE):
+        with open(APP_KILL_FILE, 'w') as fo:
+            fo.write('Delete this file to stop application nicely.')
+
+
+def kill_file_check():
+    do_exit = True
+    if os.path.isfile(APP_KILL_FILE):
+        do_exit = False
+    else:
+        print('Kill file missing - send flag to do_exit!!!')
+    return do_exit
+    
+
+def define_stock_iex_key_facts(sk):
+    ### dated by sk_year_month.json
+    file_name_suffix = datetime.strftime(datetime.now(), '%Y_%m')
+    return os.path.join(COMPANY_INFO_PATH, sk[:1].lower(), '_' + sk.lower() + '_iex_key_facts_' + file_name_suffix + '.json')
+
+
+def define_stock_iex_news(sk):
+    return os.path.join(COMPANY_INFO_PATH, sk[:1].lower(), '_' + sk.lower() + '_news.json')
 
 
 def define_stock_iex_company_info(sk):
@@ -308,41 +469,11 @@ def stock_history_load(hist_path):
 # other methods
 #####
 
-# def get_highest_historial_price_broken(days, historical_path):
-#     """
-#     input:
-#         - days: number days to dive into the history
-#         - historical_path: path of history file
-#     output:
-#         - highest_price: highest price across selected history
-#         - last_price_is_highest: was the last highest the highest
-#         - highest_price_date: what was the hight price
-#         - last_price: is the last price in the data file
-#     """
-#     prices = {}
-#     highest_price = 0.0
-#     last_price_is_highest = False
-#     highest_price_date = ''
-#     this_price = 0.0
-#     if os.path.isfile(historical_path):
-#         with open(historical_path) as csvfile:
-#             reader = csv.DictReader(csvfile)
-#         for dt_code in sorted(prices.keys())[-1*days:]:
-#             this_price = float(prices[dt_code])
-#             is_highest = False
-#             if highest_price < this_price:
-#                 is_highest = True
-#                 highest_price = this_price
-#                 highest_price_date = dt_code
-#             # print(dt_code, this_price, is_highest)
-#             last_price_is_highest = is_highest
-#     return {
-#         'highest_price': highest_price,
-#         'last_price_is_highest': last_price_is_highest,
-#         'highest_price_date': highest_price_date,
-#         'last_price': this_price
-#         }
 
+def kill_dict_key(dict_object, dead_key):
+    if dead_key in dict_object:
+        do_nothing = dict_object.pop(dead_key)
+    return dict_object
 
 
 def push_date_code_latest(date_code_in_question):

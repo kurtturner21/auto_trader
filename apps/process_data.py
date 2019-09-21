@@ -65,6 +65,13 @@ def process_new_stock_data():
 
 def main():
     process_new_stock_data()
+    ### dedup news
+    ### pop price bucket
+    ### iex comp info here
+    ### iex key facts
+    ### iex comp news here
+    ### build indexes
+    ### score news
 
 
 if __name__== "__main__":

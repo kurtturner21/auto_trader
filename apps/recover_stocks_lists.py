@@ -5,13 +5,13 @@ from time import sleep
 def recover_from_stock_histories():
     SLEEP_TIME_OUT_ON_IEX = 100
     api_call_count = 0
-    at.iex_account_metadata()
+    at.iex_account_metadata_display()
     at.iex_unknown_symbols_load()
     stocks = at.stock_data_file_load()
     all_stock_histories = at.list_all_stock_histories()
     print('This many stocks files found: ' + str(len(all_stock_histories)))
     print('------------------------------')
-    sleep(20)
+    sleep(60)
     for sp_ct, s_path in enumerate(all_stock_histories):
         if sp_ct > 10000:
             break
@@ -33,7 +33,7 @@ def recover_from_stock_histories():
                     at.stock_data_file_save(stocks)
                     sleep(5)
             stocks[sk_symbol].update({
-                "iex_company_info_path": company_data["file_path"], 
+                # "iex_company_info_path": company_data["file_path"], 
                 "iex_company_info_effect_epoch": at.generate_effective_epoch(),
                 "Historcials_file_exists": True
                 })

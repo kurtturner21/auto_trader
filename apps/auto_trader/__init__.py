@@ -1,10 +1,14 @@
 import os
 import json
 import csv
+import hashlib
 import sys
 import requests
 from datetime import datetime
-
+from time import sleep
+from time import gmtime
+import time
+import robin_stocks as r
 
 APP_BASE = os.path.join('c:' + os.sep, 'dev', 'auto_trader')
 DATA_FILES_BASE = os.path.join('c:' + os.sep, 'auto_trader_data')
@@ -17,18 +21,20 @@ SYMBOL_PATH = os.path.join(DATA_FILES_BASE, 'eod_data_files', 'data_files', 'sym
 STOCK_DAT_FILES = ['AMEX.txt','NYSE.txt','NASDAQ.txt']
 
 ### compiled data
-HISTORY_PRICE_PROCESSED_LIST_PATH = os.path.join(DATA_FILES_BASE, 'processed_dates.dat')
-HISTORY_PRICE_PATH = os.path.join(DATA_FILES_BASE, 'historicals')
+HISTORY_PRICE_PROCESSED_LIST_PATH = os.path.join(DATA_FILES_BASE, 'etc', 'processed_dates.dat')
+HISTORY_PRICE_PATH = os.path.join(DATA_FILES_BASE, 'company_info')
 COMPANY_INFO_PATH = os.path.join(DATA_FILES_BASE, 'company_info')
 DATA_PATH = os.path.join(DATA_FILES_BASE, 'stocks_lists.json')
 DATA_PATH_TEST = os.path.join(DATA_FILES_BASE, 'stocks_lists_test.json')
+AUTO_TRADER_CONFIG_PATH = os.path.join(DATA_FILES_BASE, 'etc', 'auto_trader_config.json')
+ROBIN_HOOD_CONFIG_PATH = os.path.join(DATA_FILES_BASE, 'etc', 'robin_hood_creds.json')
 
 ### IEX
 IEX_URL_BASE_PROD = 'https://cloud.iexapis.com/stable'      # production
 IEX_URL_BASE_TEST = 'https://sandbox.iexapis.com/stable'     # for testing
-IEX_TOKEN_PATHS = os.path.join(DATA_FILES_BASE, 'iex', 'iex_tokens.json')
-IEX_ACCOUNT_METADATA = os.path.join(DATA_FILES_BASE,'iex', 'account_metadata.json')
-IEX_UNKNOWN_SYMBOLS = os.path.join(DATA_FILES_BASE, 'iex', 'unkown_symbols.json')
+IEX_TOKEN_PATHS = os.path.join(DATA_FILES_BASE, 'etc', 'iex_tokens.json')
+IEX_ACCOUNT_METADATA = os.path.join(DATA_FILES_BASE,'etc', 'account_metadata.json')
+IEX_UNKNOWN_SYMBOLS = os.path.join(DATA_FILES_BASE, 'etc', 'unkown_symbols.json')
 
 ### changing vars
 date_code_latest = 19760101
@@ -44,6 +50,64 @@ E,07-Jan-2014,47.92,48.3,47.76,48.3,220600
 E,08-Jan-2014,47.74,47.9,47,47,327600
 E,09-Jan-2014,47.55,47.59,46.91,46.99,123700"""
 
+### auto trader config
+app_config = {}
+rb_config = {}
+
+
+#####
+# robin hood fuctions
+#####
+
+def r_login():
+    global rb_config
+    robin_hood_config_file_load()
+    return r.authentication.login(rb_config['un'], rb_config['pw'])
+
+
+def r_logout():
+    robin_hood_config_file_save()
+    r.authentication.logout()
+
+
+def r_get_ratings(sk_symbol):
+    def write_ratings(all_rating_data, all_ratings_data_path):
+        """ assumes that epochs will be dates """
+        with open(all_ratings_data_path, 'w') as fo:
+            fo.write(json.dumps(all_rating_data, indent=4, sort_keys=True))
+    def load_ratings(all_ratings_data_path):
+        rating_data = {}
+        if os.path.isfile(all_ratings_data_path):
+            with open(all_ratings_data_path, "r") as fi:
+                rating_data = json.load(fi)
+        return rating_data
+    ratings_data_path = define_stock_rh_ratings(sk_symbol)
+    make_dir_if_not_exists(ratings_data_path)
+    existing_ratings = {}
+    sk_rate_sell_ct = 0
+    sk_rate_buy_ct = 0
+    sk_rate_hold_ct = 0
+    error_c = 0
+    ### splitting out summary
+    try: 
+        sk_rate = r.stocks.get_ratings(sk_symbol)
+        print(sk_rate)
+        if sk_rate['summary']:
+            sk_rate_buy_ct = sk_rate['summary']['num_buy_ratings']
+            sk_rate_hold_ct = sk_rate['summary']['num_hold_ratings']
+            sk_rate_sell_ct = sk_rate['summary']['num_sell_ratings']
+    except UnboundLocalError as e:
+        error_c = 1
+    except:
+        error_c = 2
+    ### return it baby!!!
+    return {
+        'buy': sk_rate_buy_ct,
+        'sell': sk_rate_sell_ct,
+        'hold': sk_rate_hold_ct,
+        'error_code': error_c
+    }
+
 
 #####
 # data objects
@@ -52,8 +116,7 @@ def create_stock_lists_stock(sk_symbol):
     return {
         "companyName": "",
         "exchange": "",
-        "Historcials_file_exists": "",
-        "Historicals_path": define_stock_hist_path(sk_symbol),
+        "historcials_file_exists": "",
         "iex_company_info_path": "",
         "iex_company_info_effect_epoch": "",
         "current_and_usable": "",
@@ -114,38 +177,153 @@ def iex_stock_key_facts_fix(key_facts):
 
 
 def iex_stock_get_key_facts(sk_symbol):
-    global idx_unknown_symbols
-    api_call = False
-    if sk_symbol in idx_unknown_symbols:
-        return {'data': {}, 'file_path': '', 'api_call': False, 'unknown_symbol': True}
-    key_fact_data_path = define_stock_iex_key_facts(sk_symbol)
-    make_dir_if_not_exists(key_fact_data_path)
-    if not os.path.isfile(key_fact_data_path):
-        api_call = True
+    """
+    The update logic will be managed by this method. 
+    """
+    def call_iex(this_sk_symbol):
         iex_tokens = iex_load_tokens()
-        end_point = '/stock/{0}/stats'.format(sk_symbol)
+        end_point = '/stock/{0}/stats'.format(this_sk_symbol)
         r_url = IEX_URL_BASE_PROD + end_point + '?token=' + iex_tokens['production_secret']
         r = requests.get(r_url)
         key_facts = {}
+        is_unknown_symbol = False
         try:
             key_facts = json.loads(r.text)
             key_facts = iex_stock_key_facts_fix(key_facts)
-            with open(key_fact_data_path, 'w') as fo:
-                fo.write(json.dumps(key_facts, indent=4, sort_keys=True))
         except:
             if 'Unknown symbol' in r.text:
-                iex_unknown_symbols_add(sk_symbol)
+                iex_unknown_symbols_add(this_sk_symbol)
             print(r.text)
+            is_unknown_symbol = True
+        return key_facts, is_unknown_symbol
+    def write_key_facts(all_key_facts_data, all_key_facts_data_path):
+        """ assumes that epochs will be dates """
+        with open(all_key_facts_data_path, 'w') as fo:
+            fo.write(json.dumps(all_key_facts_data, indent=4, sort_keys=True))
+    ### declares
+    HOURS_BETWEEN_IEX_KEY_FACTS = get_hours_between_iex_key_facts()
+    global idx_unknown_symbols
+    api_call = False
+    is_unknown_symbol = False
+    key_facts = {}
+    key_fact_data_path = define_stock_iex_key_facts(sk_symbol)
+    make_dir_if_not_exists(key_fact_data_path)
+    latest_epoch = str(generate_effective_epoch())
+    ### what do do
+    if sk_symbol in idx_unknown_symbols:
+        """ know unknown file """
+        key_facts = iex_stock_key_facts_fix({})
+        return {'data': key_facts, 'latest_epoch': 0, 'api_call': False, 'unknown_symbol': True}
+    if not os.path.isfile(key_fact_data_path):
+        """ data file does not exists, call api, make file """
+        api_call = True
+        key_facts, is_unknown_symbol = call_iex(sk_symbol)
+        key_facts = iex_stock_key_facts_fix(key_facts)      ### got to fix and clean
+        write_key_facts({latest_epoch : key_facts}, key_fact_data_path)
+        print('Writing key facts for the first time for ' + sk_symbol + ' here ' + key_fact_data_path)
     else:
+        """ data file DOES exist, open, check epoch, supply existing or pull new """
+        all_key_facts_data = {}
         with open(key_fact_data_path, "r") as fi:
-            key_facts = json.load(fi)
-            key_facts = iex_stock_key_facts_fix(key_facts)
+            all_key_facts_data = json.load(fi)
+        latest_epoch_in_file = sorted(all_key_facts_data.keys())[-1]
+        ### within the limit:
+        if HOURS_BETWEEN_IEX_KEY_FACTS > find_hours_since_epoch(latest_epoch_in_file): 
+            key_facts = iex_stock_key_facts_fix(all_key_facts_data[latest_epoch_in_file])
+            key_facts = iex_stock_key_facts_fix(key_facts)      ### got to fix and clean
+            latest_epoch = latest_epoch_in_file
+        else:
+            api_call = True
+            key_facts, is_unknown_symbol = call_iex(sk_symbol)
+            key_facts = iex_stock_key_facts_fix(key_facts)      ### got to fix and clean
+            all_key_facts_data.update({latest_epoch : key_facts})
+            write_key_facts(all_key_facts_data, key_fact_data_path)
+            print('updated an existing key facts file for ' + sk_symbol + ' here ' + key_fact_data_path) 
     return {
         'data': key_facts,
-        'file_path': key_fact_data_path,
         'api_call': api_call,
-        'unknown_symbol': False
+        'unknown_symbol': is_unknown_symbol,
+        'latest_epoch': latest_epoch
         }
+
+
+def iex_open_news(all_news_data_path):
+    news_data = {}
+    if os.path.isfile(all_news_data_path):
+        with open(all_news_data_path, "r") as fi:
+            news_data = json.load(fi)
+    return news_data
+
+
+def iex_stock_news_get(sk_symbol):
+    ### NOT FINISHED
+    def call_iex(this_sk_symbol):
+        iex_tokens = iex_load_tokens()
+        end_point = '/stock/{0}/news/last/100'.format(this_sk_symbol)
+        r_url = IEX_URL_BASE_PROD + end_point + '?token=' + iex_tokens['production_secret']
+        r = requests.get(r_url)
+        my_news = {}
+        is_unknown_symbol = False
+        try:
+            my_news = json.loads(r.text)
+        except:
+            if 'Unknown symbol' in r.text:
+                iex_unknown_symbols_add(this_sk_symbol)
+            print(r.text)
+            is_unknown_symbol = True
+        return my_news, is_unknown_symbol
+    def write_news(all_news_data, all_news_data_path):
+        """ assumes that epochs will be dates """
+        with open(all_news_data_path, 'w') as fo:
+            fo.write(json.dumps(all_news_data, indent=4, sort_keys=True))
+    global idx_unknown_symbols
+    news_new_count = 0
+    news_returned_count = 0
+    news_oldest_item_epoch_in_set = 0
+    if sk_symbol in idx_unknown_symbols:
+        return {'news_new_count': 0, 'news_existing_ct': 0, 'news_oldest_item_epoch_in_set': 0, 'news_returned_count': '', 'api_call': False, 'unknown_symbol': True}
+    news_path = define_stock_iex_news(sk_symbol)
+    make_dir_if_not_exists(news_path)
+    existing_news = iex_open_news(news_path)
+    news_existing_ct = len(existing_news)
+    new_news, is_unknown_symbol = call_iex(sk_symbol)
+    if not is_unknown_symbol:
+        for n_item in new_news:
+            news_returned_count += 1
+            if news_oldest_item_epoch_in_set > n_item['datetime'] or news_oldest_item_epoch_in_set == 0:
+                news_oldest_item_epoch_in_set = n_item['datetime']
+            n_key = str(n_item['datetime']) + '_' + make_hash_of_list(n_item)
+            if n_key not in existing_news:
+                news_new_count += 1
+                existing_news.update({n_key: n_item})
+        write_news(existing_news, news_path)
+    return {
+        'news_new_count': news_new_count,
+        'news_returned_count': news_returned_count,
+        'news_existing_ct': news_existing_ct,
+        'news_oldest_item_epoch_in_set': news_oldest_item_epoch_in_set,
+        'api_call': True,
+        'unknown_symbol': is_unknown_symbol
+    }
+    
+
+def iex_get_exising_news_item_count(sk_symbol):
+    """
+    Returns the number of entries in the stock news file. 
+    """
+    news_path = define_stock_iex_news(sk_symbol)
+    existing_news = iex_open_news(news_path)
+    news_existing_ct = len(existing_news)
+    return news_existing_ct
+
+
+def iex_get_exising_news_items(sk_symbol):
+    """
+    returns a list of news items from file.
+    """
+    news_path = define_stock_iex_news(sk_symbol)
+    existing_news = iex_open_news(news_path)
+    return existing_news
 
 
 def iex_stock_company_fix_info(company_data):
@@ -168,15 +346,19 @@ def iex_stock_company_fix_info(company_data):
     return company_data
 
 
-def iex_stock_company_get_info(sk_symbol):
+def iex_stock_company_get_info(sk_symbol, pull_new_data=False):
+    """
+    If pull_new_data is True, then it will pull from the API.
+    If pull_new_data is False, then it will pull from the file. 
+    So update logic is desigend by the calling application.  
+    """
     global idx_unknown_symbols
     api_call = False
     if sk_symbol in idx_unknown_symbols:
         return {'data': {}, 'file_path': '', 'api_call': False, 'unknown_symbol': True}
     company_data_path = define_stock_iex_company_info(sk_symbol)
-    ### fixing data
     make_dir_if_not_exists(company_data_path)
-    if not os.path.isfile(company_data_path):
+    if not os.path.isfile(company_data_path) or pull_new_data:
         api_call = True
         iex_tokens = iex_load_tokens()
         end_point = '/stock/{0}/company'.format(sk_symbol)
@@ -202,16 +384,6 @@ def iex_stock_company_get_info(sk_symbol):
         'api_call': api_call,
         'unknown_symbol': False
         }
-
-
-# def iex_stock_news_get(sk_symbol):
-#     ### NOT FINISHED
-#     global idx_unknown_symbols
-#     api_call = False
-#     if sk_symbol in idx_unknown_symbols:
-#         return {'data': {}, 'file_path': '', 'api_call': False, 'unknown_symbol': True}
-#     news_path = define_stock_iex_news(sk_symbol)
-#     make_dir_if_not_exists(news_path)
 
 
 def iex_unknown_symbols_add(sk_symbol):
@@ -265,20 +437,13 @@ def iex_issue_type_code(issue_type):
 #####
 
 
-def find_hours_since_epoch(object_data, object_field):
-    if object_field not in object_data:
-        return -1
-    elif object_data[object_field] == '':
-        return -1
-    elif object_field in object_data:
-        epoch_now = float(datetime.now().timestamp())
-        try:
-            return round(float(epoch_now - float(object_data[object_field]))/60/60, 6)
-        except:
-            print("FAIL, find_hours_since_epoch: ", object_data, object_field)
-            sys.exit(20)
-    else:
-        return -1
+def find_hours_since_epoch(last_epoch):
+    epoch_now = float(datetime.now().timestamp())
+    try:
+        last_epoch_float = float(last_epoch)
+    except:
+        last_epoch_float = 0.0
+    return round(float(epoch_now - float(last_epoch_float))/60/60, 6)
 
 
 def generate_effective_epoch():
@@ -289,9 +454,81 @@ def generate_effective_string():
     return str(datetime.now())
 
 
+def epoch_to_human(epoch_time):
+    if len(str(epoch_time)) == 10:
+        return time.strftime('%m/%d/%Y %H:%M:%S',  gmtime(epoch_time))
+    else:
+        return time.strftime('%m/%d/%Y %H:%M:%S',  gmtime(epoch_time/1000.))
+
+
+#####
+# config getters & setters
+####
+
+def get_last_time_ran():
+    global app_config
+    return app_config['last_time_ran']
+
+
+def set_last_time_ran(last_time_ran):
+    global app_config
+    app_config['last_time_ran'] = last_time_ran
+    auto_traider_config_file_save()
+
+
+def get_hours_to_collect_news_for_zeros():
+    global app_config
+    return app_config['hours_to_collect_news_for_zeros']
+
+
+def get_run_in_testing():
+    global app_config
+    return app_config['run_in_testing']
+
+
+def get_sleep_time_out_on_iex():
+    global app_config
+    return app_config['sleep_time_out_on_iex']
+
+
+def get_hours_between_iex_comp_info():
+    global app_config
+    return app_config['hours_between_iex_comp_info']
+
+
+def get_hours_between_iex_key_facts():
+    global app_config
+    return app_config['hours_between_iex_key_facts']
+
+
 #####
 # file based methods
 #####
+
+def auto_traider_config_file_save():
+    global app_config
+    with open(AUTO_TRADER_CONFIG_PATH, 'w') as fo:
+        json.dump(app_config, fo, sort_keys=True, indent=4)
+
+
+def auto_traider_config_file_load():
+    global app_config
+    if os.path.isfile(AUTO_TRADER_CONFIG_PATH):
+        with open(AUTO_TRADER_CONFIG_PATH, "r") as fi:
+            app_config = json.load(fi)
+
+
+def robin_hood_config_file_save():
+    global rb_config
+    with open(ROBIN_HOOD_CONFIG_PATH, 'w') as fo:
+        json.dump(rb_config, fo, sort_keys=True, indent=4)
+
+
+def robin_hood_config_file_load():
+    global rb_config
+    if os.path.isfile(ROBIN_HOOD_CONFIG_PATH):
+        with open(ROBIN_HOOD_CONFIG_PATH, "r") as fi:
+            rb_config = json.load(fi)
 
 
 def kill_file_touch():
@@ -311,9 +548,7 @@ def kill_file_check():
     
 
 def define_stock_iex_key_facts(sk):
-    ### dated by sk_year_month.json
-    file_name_suffix = datetime.strftime(datetime.now(), '%Y_%m')
-    return os.path.join(COMPANY_INFO_PATH, sk[:1].lower(), '_' + sk.lower() + '_iex_key_facts_' + file_name_suffix + '.json')
+    return os.path.join(COMPANY_INFO_PATH, sk[:1].lower(), '_' + sk.lower() + '_iex_key_facts.json')
 
 
 def define_stock_iex_news(sk):
@@ -322,6 +557,9 @@ def define_stock_iex_news(sk):
 
 def define_stock_iex_company_info(sk):
     return os.path.join(COMPANY_INFO_PATH, sk[:1].lower(), '_' + sk.lower() + '_iex_compnay_info.json')
+
+def define_stock_rh_ratings(sk):
+    return os.path.join(COMPANY_INFO_PATH, sk[:1].lower(), '_' + sk.lower() + '_rh_ratings.json')
 
 
 def define_stock_hist_path(sk):
@@ -481,17 +719,24 @@ def push_date_code_latest(date_code_in_question):
     Lastest date code based on stock historicals.
     """
     global date_code_latest
-    try:
-        if date_code_in_question > date_code_latest:
-            date_code_latest = date_code_in_question
-    except:
-        print('Failure in push_date_code_latest')
-        print(date_code_latest)
-        print(date_code_in_question)
-        print(type(date_code_in_question))
+    if date_code_in_question:
+        try:
+            if date_code_in_question > date_code_latest:
+                date_code_latest = date_code_in_question
+        except:
+            print('Failure in push_date_code_latest')
+            print(date_code_latest)
+            print(date_code_in_question)
+            print(type(date_code_in_question))
 
 
-# def date_code_latest_save():
+def make_hash_of_list(n_item):
+    to_b_hashed_str = ''
+    for k in sorted(n_item):
+        to_b_hashed_str += str(n_item[k])
+    return hashlib.md5(to_b_hashed_str.encode('utf-8')).hexdigest()
+
+
 def get_date_code_latest():
     global date_code_latest
     return date_code_latest
@@ -511,4 +756,61 @@ def define_stock_price_bucket(org_close):
         return 'franklin'
     else:
         return 'large'
+
+
+def filter_me(my_stock):
+    """
+    This filter is designed to filter out some stocks that are lacking in data points
+    """
+    DESIRED_COUNTRIES_LIMIT = False
+    DESIRED_COUNTRIES = ['US', 'AU', '', None]
+    DESIRED_STOCK_ISSUE_TYPE_LIMIT = True
+    DESIRED_STOCK_ISSUE_TYPE = ['ps','cs', 'ad', 'si']
+    DESIRED_PRICE_BUCKET_LIMIT = True
+    DESIRED_PRICE_BUCKET = ['deca', 'dollar','penny', 'half']
+    NON_DESIRED_INDUSTRY_LIMIT = True
+    NON_DESIRED_INDUSTRY = ['Precious Metals', 'Steel', 'Aluminum', 'Coal']
+    MIN_HISTORY_LIMIT = False
+    MIN_HISTORY = 200
+    DIVIDEND_MIN_LIMIT = False
+    DIVIDEND_MIN = .001
+    PE_LIMIT = True
+    PE_MAX = 40
+    PE_MIN = -5
+    NEWS_LIMIT = True
+    NEWS_MIN = 20
+    filter_me = False
+    if my_stock['iex_unknown_symbol']:
+        filter_me = True
+    if my_stock['country'] not in DESIRED_COUNTRIES and DESIRED_COUNTRIES_LIMIT:
+        filter_me = True
+    if my_stock['issueType'] not in DESIRED_STOCK_ISSUE_TYPE and DESIRED_STOCK_ISSUE_TYPE_LIMIT:
+        filter_me = True
+    if my_stock['price_bucket'] not in DESIRED_PRICE_BUCKET and DESIRED_PRICE_BUCKET_LIMIT:
+        filter_me = True
+    if my_stock['datecode_count'] < MIN_HISTORY and MIN_HISTORY_LIMIT:
+        filter_me = True
+    if my_stock['industry'] in NON_DESIRED_INDUSTRY and NON_DESIRED_INDUSTRY_LIMIT:
+        filter_me = True
+    if my_stock['dividendYield'] < DIVIDEND_MIN and DIVIDEND_MIN_LIMIT:
+        filter_me = True
+    if (my_stock['peRatio'] < PE_MIN or my_stock['peRatio'] > PE_MAX) and PE_LIMIT:
+        filter_me = True
+    if my_stock['news_existing_ct'] < NEWS_MIN and NEWS_LIMIT:
+        filter_me = True
+    return filter_me
+
+
+def print_stock_news(stock_symbol):
+    news_items = iex_get_exising_news_items(stock_symbol)
+    for ni_k_ct, ni_k in enumerate(sorted(news_items)):
+        if ni_k_ct < 10:
+            news_item = news_items[ni_k]
+            print('\t' + epoch_to_human(news_item['datetime']) + '\t' +
+                news_item['headline'].encode("ascii", 'ignore').decode("ascii") + '\t' +
+                news_item['related']
+                )
+
+
+auto_traider_config_file_load()
 

@@ -8,7 +8,7 @@ from datetime import datetime
 from time import sleep
 from time import gmtime
 import time
-import robin_stocks as r
+import robin_stocks as rhood
 
 APP_BASE = os.path.join('c:' + os.sep, 'dev', 'auto_trader')
 DATA_FILES_BASE = os.path.join('c:' + os.sep, 'auto_trader_data')
@@ -62,51 +62,62 @@ rb_config = {}
 def r_login():
     global rb_config
     robin_hood_config_file_load()
-    return r.authentication.login(rb_config['un'], rb_config['pw'])
+    return rhood.authentication.login(rb_config['un'], rb_config['pw'])
 
 
 def r_logout():
     robin_hood_config_file_save()
-    r.authentication.logout()
+    rhood.authentication.logout()
 
 
 def r_get_ratings(sk_symbol):
-    def write_ratings(all_rating_data, all_ratings_data_path):
-        """ assumes that epochs will be dates """
-        with open(all_ratings_data_path, 'w') as fo:
-            fo.write(json.dumps(all_rating_data, indent=4, sort_keys=True))
-    def load_ratings(all_ratings_data_path):
-        rating_data = {}
-        if os.path.isfile(all_ratings_data_path):
-            with open(all_ratings_data_path, "r") as fi:
-                rating_data = json.load(fi)
-        return rating_data
     ratings_data_path = define_stock_rh_ratings(sk_symbol)
     make_dir_if_not_exists(ratings_data_path)
-    existing_ratings = {}
-    sk_rate_sell_ct = 0
-    sk_rate_buy_ct = 0
-    sk_rate_hold_ct = 0
-    error_c = 0
-    ### splitting out summary
-    try: 
-        sk_rate = r.stocks.get_ratings(sk_symbol)
-        print(sk_rate)
-        if sk_rate['summary']:
-            sk_rate_buy_ct = sk_rate['summary']['num_buy_ratings']
-            sk_rate_hold_ct = sk_rate['summary']['num_hold_ratings']
-            sk_rate_sell_ct = sk_rate['summary']['num_sell_ratings']
-    except UnboundLocalError as e:
-        error_c = 1
+    if os.path.isfile(ratings_data_path):
+        with open(ratings_data_path, "r") as fi:
+            ratings_data = json.load(fi)  
+        ### only needed temporary 
+        if 'returned_ct' in ratings_data:
+            ratings_data = kill_dict_key(ratings_data, 'returned_ct')
+        if 'last_rb_api_epoch' in ratings_data:
+            ratings_data.update({'last_rh_api_epoch': ratings_data['last_rb_api_epoch']})
+            ratings_data = kill_dict_key(ratings_data, 'last_rb_api_epoch')
+    else:
+        # print('\t\tnew ratings file ' +  ratings_data_path)
+        ratings_data = create_rating_object()
+    new_epoch =  generate_effective_epoch()
+    try:
+        sk_rates = rhood.stocks.get_ratings(sk_symbol)
+        new_ratings_count = 0
+        ratings_data['last_rh_api_epoch'] = new_epoch
+        if 'ratings' in sk_rates:
+            ### these number rarly match the text versions
+            if 'summary' in sk_rates:
+                if sk_rates['summary']:
+                    ratings_data['sell'] = sk_rates['summary']['num_sell_ratings']
+                    ratings_data['buy'] = sk_rates['summary']['num_buy_ratings']
+                    ratings_data['hold'] = sk_rates['summary']['num_hold_ratings']
+                    ratings_data['error_code'] = 0
+                else:
+                    ratings_data['error_code'] = 2
+            for rate in sk_rates['ratings']:
+                r_text = rate['text'].decode('utf-8', 'ignore').encode('utf-8')
+                r_hash = hashlib.md5(r_text).hexdigest()
+                r_key = str(new_epoch) + '_' + r_hash
+                r_type = rate['type']
+                if r_hash not in ratings_data['hash_list']:
+                    new_ratings_count += 1
+                    ratings_data['hash_list'].append(r_hash)
+                    ratings_data['ratings'].update({r_key: {
+                        'type': r_type, 
+                        'text': r_text.decode('ascii', 'ignore')
+                        }})
+            ratings_data['new_ratings_count'] = new_ratings_count
     except:
-        error_c = 2
-    ### return it baby!!!
-    return {
-        'buy': sk_rate_buy_ct,
-        'sell': sk_rate_sell_ct,
-        'hold': sk_rate_hold_ct,
-        'error_code': error_c
-    }
+        ratings_data['error_code'] = 1
+    with open(ratings_data_path, 'w') as fo:
+        fo.write(json.dumps(ratings_data, indent=4, sort_keys=True))
+    return ratings_data
 
 
 #####
@@ -126,6 +137,19 @@ def create_stock_lists_stock(sk_symbol):
         "datecode_last_close": "",
         "price_bucket": "",
         "industry": ""
+    }
+
+
+def create_rating_object():
+    return {
+        "buy": 0,
+        "sell": 0,
+        "hold": 0,
+        "last_rh_api_epoch": 0,
+        "new_ratings_count": 0,
+        "hash_list": [],
+        "ratings": {},
+        "error_code": 0
     }
 
 
@@ -247,14 +271,6 @@ def iex_stock_get_key_facts(sk_symbol):
         }
 
 
-def iex_open_news(all_news_data_path):
-    news_data = {}
-    if os.path.isfile(all_news_data_path):
-        with open(all_news_data_path, "r") as fi:
-            news_data = json.load(fi)
-    return news_data
-
-
 def iex_stock_news_get(sk_symbol):
     ### NOT FINISHED
     def call_iex(this_sk_symbol):
@@ -292,7 +308,7 @@ def iex_stock_news_get(sk_symbol):
             news_returned_count += 1
             if news_oldest_item_epoch_in_set > n_item['datetime'] or news_oldest_item_epoch_in_set == 0:
                 news_oldest_item_epoch_in_set = n_item['datetime']
-            n_key = str(n_item['datetime']) + '_' + make_hash_of_list(n_item)
+            n_key = str(n_item['datetime']) + '_' + make_news_hash_of_list(n_item)
             if n_key not in existing_news:
                 news_new_count += 1
                 existing_news.update({n_key: n_item})
@@ -312,18 +328,39 @@ def iex_get_exising_news_item_count(sk_symbol):
     Returns the number of entries in the stock news file. 
     """
     news_path = define_stock_iex_news(sk_symbol)
-    existing_news = iex_open_news(news_path)
+    existing_news = iex_open_news(news_path) 
     news_existing_ct = len(existing_news)
     return news_existing_ct
 
 
+def make_news_hash_of_list(n_item):
+    """
+    ONLY FOR NEWS ITEMS.
+    """
+    to_b_hashed_str = ''
+    for k in sorted(n_item):
+        to_b_hashed_str += str(n_item[k])
+    return hashlib.md5(to_b_hashed_str.encode('utf-8')).hexdigest()
+
+
 def iex_get_exising_news_items(sk_symbol):
     """
-    returns a list of news items from file.
+    Returns a list of news items from file with sk_symbol.
     """
     news_path = define_stock_iex_news(sk_symbol)
     existing_news = iex_open_news(news_path)
     return existing_news
+
+
+def iex_open_news(all_news_data_path):
+    """
+    Returns a list of news items from file with path to news file.
+    """
+    news_data = {}
+    if os.path.isfile(all_news_data_path):
+        with open(all_news_data_path, "r") as fi:
+            news_data = json.load(fi)
+    return news_data
 
 
 def iex_stock_company_fix_info(company_data):
@@ -728,13 +765,6 @@ def push_date_code_latest(date_code_in_question):
             print(date_code_latest)
             print(date_code_in_question)
             print(type(date_code_in_question))
-
-
-def make_hash_of_list(n_item):
-    to_b_hashed_str = ''
-    for k in sorted(n_item):
-        to_b_hashed_str += str(n_item[k])
-    return hashlib.md5(to_b_hashed_str.encode('utf-8')).hexdigest()
 
 
 def get_date_code_latest():

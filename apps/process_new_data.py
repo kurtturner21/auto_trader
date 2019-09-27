@@ -332,6 +332,32 @@ def get_iex_news():
     print('\n')
 
 
+def process_new_retings_data():
+    r_login_info = at.r_login()
+    print('\nSTARTING to pull RATINGS!!!\n')
+    update_sks = 0
+    for sk_ct, sk in enumerate(sorted(stocks)):
+        if 'rh_error_code' in stocks[sk]:
+            if stocks[sk]['rh_error_code'] > 0:
+                continue
+        diff_in_hours = 10000
+        if 'rh_api_epoch' in stocks[sk]:
+            diff_in_hours = (at.datetime.now().timestamp() - stocks[sk]['rh_api_epoch']) / 60 / 60
+        if diff_in_hours > 72:
+            update_sks += 1
+            rh_ratings = at.r_get_ratings(sk)
+            stocks[sk].update({'rh_hold': rh_ratings['hold']})
+            stocks[sk].update({'rh_buy': rh_ratings['buy']})
+            stocks[sk].update({'rh_sell': rh_ratings['sell']})
+            stocks[sk].update({'rh_api_epoch': rh_ratings['last_rh_api_epoch']})
+            stocks[sk].update({'rh_error_code': rh_ratings['error_code']})
+            str_fmt = '{0:>10} {1:>10} sell:{2:<5} hold:{3:<5} buy:{4:<5}  days since last: {5:<10}  e_code: {6}'
+            print(str_fmt.format(sk_ct, sk, rh_ratings['sell'], rh_ratings['hold'], rh_ratings['buy'], 
+                diff_in_hours, rh_ratings['error_code']))
+    print('update_sks: ' + str(update_sks))
+    at.r_logout()
+
+
 def main():
     global stocks
     global api_call_count
@@ -393,6 +419,7 @@ def main():
             at.stock_data_file_save(stocks)
     print_status('get_iex_key_facts', this_stime, overall_stime)
 
+    process_new_retings_data()
     get_iex_news()
 
 

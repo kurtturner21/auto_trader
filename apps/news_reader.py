@@ -4,6 +4,7 @@ import auto_trader as at
 def news_reader():
     stime = at.datetime.now().timestamp()
     r_login_info = at.r_login()
+    # print(r_login_info)
     TESTING = at.get_run_in_testing()
     if TESTING:
         stocks = at.test_stock_data_file_load()
@@ -20,16 +21,16 @@ def news_reader():
             continue
         if at.filter_me(stocks[sk]):
             continue
-        if sk != 'crc':
-            continue
+        # if sk != 'crc':
+        #     continue
         found_by_filter_ct += 1
         rh_ratings = at.r_get_ratings(sk)
-
         sk_rate_sell_ct = rh_ratings['sell']
         sk_rate_buy_ct = rh_ratings['buy']
         sk_rate_hold_ct = rh_ratings['hold']
-        str_fmt = '{0:>10} {1:<10}{2:<50}{3:<5}{4:<10}{5:<5}{6:<10} sell:{7:<5} hold:{7:<5} buy:{8:<5}'
-        print(str_fmt.format(sk_ct, sk, sk_name[:46], sk_news_existing_ct, sk_last_close, sk_history_count, sk_price_bucket, sk_rate_sell_ct, sk_rate_hold_ct, sk_rate_buy_ct))
+        str_fmt = '{0:>10} {1:<10}{2:<50}{3:<5}{4:<10}{5:<5}{6:<10} sell:{7:<5} hold:{8:<5} buy:{9:<5}'
+        print(str_fmt.format(sk_ct, sk, sk_name[:46], sk_news_existing_ct, sk_last_close, 
+            sk_history_count, sk_price_bucket, sk_rate_sell_ct, sk_rate_hold_ct, sk_rate_buy_ct))
     print('\nfound_by_filter_ct: ' + str(found_by_filter_ct))
     print('Time to process, ', round(at.datetime.now().timestamp() - stime, 2))
 

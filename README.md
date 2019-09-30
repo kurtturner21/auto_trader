@@ -51,31 +51,20 @@ Time will take about 5 minutes.
 ### 1.0
 
 1. Pull down IEX
-- https://iexcloud.io/docs/api/#key-stats
-- https://iexcloud.io/docs/api/#news
+- ~~https://iexcloud.io/docs/api/#key-stats~~
+- ~~https://iexcloud.io/docs/api/#news~~
 - https://iexcloud.io/docs/api/#splits
 - U.S. Holidays and Trading Dates
 - Earnings
-2. Setup a stock picker based off of interchangeable models
+2. ~~Setup a stock picker based off of interchangeable models~~
 3. Setup a purchase tester for the picker with tracking cost bases, profit and lose, wash purchase warning, trade/day ratio limit, etc.
 4. Reporting on purchase history.
-5. Interface with robinhood api (GO LIVE with $200.00)
-- http://www.robin-stocks.com/en/latest/
+5. ~~Interface with robinhood api~~
+- ~~http://www.robin-stocks.com/en/latest/~~
 
 ### 1.1
 
-1. Download analyist reports
-- robin_stocks.stocks.get_ratings(symbol, info=None)[source]
-2. Create ranking system model based on analysit reports
-3. Collabse "edo" & "iex" scripts down to one script.
-
-### 1.2
-
-1. Download customer setement 
-2. Create ranking system model based on this customer setement.
-
-### 1.3
-
-1. define 5 to 10 common stock indexes: dow jones, sp500, etc.
-2. reporting on historical data with each index. 
-3. flag stocks subject to massive market corrections.
+1. ~~Download analyist reports~~
+- ~~robin_stocks.stocks.get_ratings(symbol, info=None)[source]~~
+3. ~~Collabse "edo" & "iex" scripts down to one script.~~
+4. Intergarate data from Last10K.

@@ -27,7 +27,12 @@ COMPANY_INFO_PATH = os.path.join(DATA_FILES_BASE, 'company_info')
 DATA_PATH = os.path.join(DATA_FILES_BASE, 'stocks_lists.json')
 DATA_PATH_TEST = os.path.join(DATA_FILES_BASE, 'stocks_lists_test.json')
 AUTO_TRADER_CONFIG_PATH = os.path.join(DATA_FILES_BASE, 'etc', 'auto_trader_config.json')
+
+### Robin hood
 ROBIN_HOOD_CONFIG_PATH = os.path.join(DATA_FILES_BASE, 'etc', 'robin_hood_creds.json')
+
+### Last10K
+LAST10K_CONFIG_PATH = os.path.join(DATA_FILES_BASE, 'etc', 'last10k_keys.json')
 
 ### IEX
 IEX_URL_BASE_PROD = 'https://cloud.iexapis.com/stable'      # production
@@ -53,6 +58,211 @@ E,09-Jan-2014,47.55,47.59,46.91,46.99,123700"""
 ### auto trader config
 app_config = {}
 rb_config = {}
+last10k_config = {}
+
+
+def filter_me(stock_record):
+    """
+    This filter is designed to filter out some stocks that are lacking in data points
+    """
+    try:
+        DESIRED_COUNTRIES_LIMIT = False
+        DESIRED_COUNTRIES = ['US', 'AU', '', None]
+        DESIRED_STOCK_ISSUE_TYPE_LIMIT = True
+        DESIRED_STOCK_ISSUE_TYPE = ['ps','cs', 'ad', 'si']
+        DESIRED_PRICE_BUCKET_LIMIT = False
+        DESIRED_PRICE_BUCKET = ['deca', 'dollar','penny', 'half']
+        NON_DESIRED_INDUSTRY_LIMIT = False
+        NON_DESIRED_INDUSTRY = ['Precious Metals', 'Steel', 'Aluminum', 'Coal']
+        MIN_HISTORY_LIMIT = True
+        MIN_HISTORY = 200
+        DIVIDEND_MIN_LIMIT = True
+        DIVIDEND_MIN = .001
+        PE_LIMIT = False
+        PE_MAX = 40
+        PE_MIN = -5
+        NEWS_LIMIT = False
+        NEWS_MIN = 20
+        RH_RATING_LIMIT = True
+        RH_RATING_MIN = .95
+        rh_rate_score = calculate_rating_score(stock_record)
+        filter_me = False
+        if stock_record['iex_unknown_symbol']:
+            filter_me = True
+        if stock_record['country'] not in DESIRED_COUNTRIES and DESIRED_COUNTRIES_LIMIT:
+            filter_me = True
+        if stock_record['issueType'] not in DESIRED_STOCK_ISSUE_TYPE and DESIRED_STOCK_ISSUE_TYPE_LIMIT:
+            filter_me = True
+        if stock_record['price_bucket'] not in DESIRED_PRICE_BUCKET and DESIRED_PRICE_BUCKET_LIMIT:
+            filter_me = True
+        if stock_record['datecode_count'] < MIN_HISTORY and MIN_HISTORY_LIMIT:
+            filter_me = True
+        if stock_record['industry'] in NON_DESIRED_INDUSTRY and NON_DESIRED_INDUSTRY_LIMIT:
+            filter_me = True
+        if stock_record['dividendYield'] < DIVIDEND_MIN and DIVIDEND_MIN_LIMIT:
+            filter_me = True
+        if (stock_record['peRatio'] < PE_MIN or stock_record['peRatio'] > PE_MAX) and PE_LIMIT:
+            filter_me = True
+        if stock_record['news_existing_ct'] < NEWS_MIN and NEWS_LIMIT:
+            filter_me = True
+        if rh_rate_score < RH_RATING_MIN and RH_RATING_LIMIT:
+            filter_me = True
+        return filter_me
+    except:
+        print('FAIL: this stock failed the filtering process: ' + stock_record['symbol'])
+        sys.exit(20)
+
+
+#####
+# print constructors
+#####
+def printing_stock_standard(loop_num, stock_record, print_standard='one'):
+    rh_rate_score = calculate_rating_score(stock_record)
+    if print_standard == 'one':
+        stock_row_print_format = '{0:<6}{1:<10}{2:<10}{3:<10}{4:<30}{5:<10}{6:<30}{7:<25}{8:<5}{9:<5}{10:<8}{11:<10} news:{12:<10} rating:{13:<3}'
+        print_str = stock_row_print_format.format(loop_num, stock_record['symbol'], stock_record['datecode_last_close'], stock_record['datecode_count'], 
+            stock_record['companyName'][:28].encode("ascii", 'ignore').decode("ascii"), stock_record['employees'], stock_record['industry'][:28], 
+            stock_record['sector'][:23], stock_record['issueType'], 
+            stock_record['country'], stock_record['peRatio'], stock_record['dividendYield'], stock_record['news_existing_ct'],
+            rh_rate_score
+            )
+        print(print_str)
+    elif print_standard == 'two':
+        stock_row_print_format = '{0:<6}{1[symbol]:<5}{1[issueType]:<8}{1[country]:<10}{1[peRatio]:<10}{1[dividendYield]:<10} rating:{2:<3}'
+        print_str = stock_row_print_format.format(loop_num, stock_record, rh_rate_score)
+        return print_str
+        print(print_str)
+
+
+def calculate_rating_score(stock_record):
+    rh_rate_score_divisor = (stock_record['rh_buy'] + stock_record['rh_hold'] + stock_record['rh_sell'])
+    if rh_rate_score_divisor > 0:
+        rh_rate_score = round(((stock_record['rh_buy'] * 1 + stock_record['rh_hold'] * .5 + stock_record['rh_sell'] * 0) /  rh_rate_score_divisor), 2)
+    else:
+        rh_rate_score = .2
+    return rh_rate_score
+
+
+def print_process_module_status(module_name, this_stime, overall_stime):
+    print('Time to process {0:<30} this: {1:<20}  overall: {2:<20}'.format(
+            module_name,
+            round(datetime.now().timestamp() - this_stime, 2), 
+            round(datetime.now().timestamp() - overall_stime, 2)
+            ))
+
+
+
+def print_stock_news(stock_symbol):
+    print('\t### NEWS')
+    news_items = iex_get_exising_news_items(stock_symbol)
+    for ni_k_ct, ni_k in enumerate(sorted(news_items)):
+        if ni_k_ct < 10:
+            news_item = news_items[ni_k]
+            print('\t' + epoch_to_human(news_item['datetime']) + '\t' +
+                news_item['headline'].encode("ascii", 'ignore').decode("ascii") + '\t' +
+                news_item['related']
+                )
+
+
+def print_stock_history(stock_symbol, days_into_past=10, to_reverse=True):
+    print('\t### History')
+    st_history_data = stock_history_load(stock_symbol)
+    for sk_h_ct, sk_h in enumerate(sorted(st_history_data['history_data'], reverse=to_reverse)):
+        if sk_h_ct < 10:
+            print(sk_h, st_history_data['history_data'][sk_h])
+
+
+#####
+# stock history functions
+#####
+
+def get_sh_52_week_numbers(stock_history):
+    # one year of seconds 31536000
+    one_year_epoch = generate_effective_epoch() - 31471200
+    one_year_datecode = int(time.strftime('%Y%m%d',  gmtime(one_year_epoch)))
+    high_52 = 0
+    low_52 = 0
+    for dt_code in sorted(stock_history, reverse=True):
+        if dt_code >= one_year_datecode:
+            cur_dt_high = stock_history[dt_code]['High']
+            cur_dt_low = stock_history[dt_code]['Low']
+            cur_dt_close = stock_history[dt_code]['Close']
+            if cur_dt_high > high_52:
+                high_52 = cur_dt_high
+                print(dt_code, high_52, low_52)
+            if cur_dt_low < low_52 or low_52 == 0:
+                low_52 = cur_dt_low
+                print(dt_code, high_52, low_52)
+
+
+#####
+# date time methods
+#####
+
+
+def find_hours_since_epoch(last_epoch):
+    epoch_now = float(datetime.now().timestamp())
+    try:
+        last_epoch_float = float(last_epoch)
+    except:
+        last_epoch_float = 0.0
+    return round(float(epoch_now - float(last_epoch_float))/60/60, 6)
+
+
+def generate_effective_epoch():
+    return datetime.timestamp(datetime.now())
+
+
+def generate_effective_string():
+    return str(datetime.now())
+
+
+def epoch_to_human(epoch_time):
+    epoch_time_float = float(epoch_time)
+    if len(str(int(epoch_time_float))) == 10:
+        return time.strftime('%m/%d/%Y %H:%M:%S',  gmtime(epoch_time_float))
+    else:
+        return time.strftime('%m/%d/%Y %H:%M:%S',  gmtime(epoch_time_float/1000.))
+
+
+#####
+# data objects
+#####
+def create_stock_lists_stock(sk_symbol):
+    return {
+        "companyName": "",
+        "exchange": "",
+        "historcials_file_exists": "",
+        "iex_company_info_path": "",
+        "iex_company_info_effect_epoch": 0,
+        "iex_news_epoch": 0,
+        "current_and_usable": "",
+        "datecode_count": "",
+        "datecode_first": "",
+        "datecode_last": "",
+        "datecode_last_close": "",
+        "price_bucket": "",
+        "industry": ""
+    }
+
+
+def create_rating_object():
+    return {
+        "buy": 0,
+        "sell": 0,
+        "hold": 0,
+        "last_rh_api_epoch": 0,
+        "new_ratings_count": 0,
+        "hash_list": [],
+        "ratings": {},
+        "error_code": 0
+    }
+
+
+#####
+# LAST10k functions
+#####
+
 
 
 #####
@@ -118,39 +328,6 @@ def r_get_ratings(sk_symbol):
     with open(ratings_data_path, 'w') as fo:
         fo.write(json.dumps(ratings_data, indent=4, sort_keys=True))
     return ratings_data
-
-
-#####
-# data objects
-#####
-def create_stock_lists_stock(sk_symbol):
-    return {
-        "companyName": "",
-        "exchange": "",
-        "historcials_file_exists": "",
-        "iex_company_info_path": "",
-        "iex_company_info_effect_epoch": "",
-        "current_and_usable": "",
-        "datecode_count": "",
-        "datecode_first": "",
-        "datecode_last": "",
-        "datecode_last_close": "",
-        "price_bucket": "",
-        "industry": ""
-    }
-
-
-def create_rating_object():
-    return {
-        "buy": 0,
-        "sell": 0,
-        "hold": 0,
-        "last_rh_api_epoch": 0,
-        "new_ratings_count": 0,
-        "hash_list": [],
-        "ratings": {},
-        "error_code": 0
-    }
 
 
 #####
@@ -254,7 +431,6 @@ def iex_stock_get_key_facts(sk_symbol):
         ### within the limit:
         if HOURS_BETWEEN_IEX_KEY_FACTS > find_hours_since_epoch(latest_epoch_in_file): 
             key_facts = iex_stock_key_facts_fix(all_key_facts_data[latest_epoch_in_file])
-            key_facts = iex_stock_key_facts_fix(key_facts)      ### got to fix and clean
             latest_epoch = latest_epoch_in_file
         else:
             api_call = True
@@ -470,35 +646,6 @@ def iex_issue_type_code(issue_type):
 
 
 #####
-# date time methods
-#####
-
-
-def find_hours_since_epoch(last_epoch):
-    epoch_now = float(datetime.now().timestamp())
-    try:
-        last_epoch_float = float(last_epoch)
-    except:
-        last_epoch_float = 0.0
-    return round(float(epoch_now - float(last_epoch_float))/60/60, 6)
-
-
-def generate_effective_epoch():
-    return datetime.timestamp(datetime.now())
-
-
-def generate_effective_string():
-    return str(datetime.now())
-
-
-def epoch_to_human(epoch_time):
-    if len(str(epoch_time)) == 10:
-        return time.strftime('%m/%d/%Y %H:%M:%S',  gmtime(epoch_time))
-    else:
-        return time.strftime('%m/%d/%Y %H:%M:%S',  gmtime(epoch_time/1000.))
-
-
-#####
 # config getters & setters
 ####
 
@@ -555,6 +702,19 @@ def auto_traider_config_file_load():
             app_config = json.load(fi)
 
 
+def last10k_config_file_save():
+    global last10k_config
+    with open(LAST10K_CONFIG_PATH, 'w') as fo:
+        json.dump(rb_config, fo, sort_keys=True, indent=4)
+
+
+def last10k_config_file_load():
+    global last10k_config
+    if os.path.isfile(LAST10K_CONFIG_PATH):
+        with open(LAST10K_CONFIG_PATH, "r") as fi:
+            last10k_config = json.load(fi)
+
+
 def robin_hood_config_file_save():
     global rb_config
     with open(ROBIN_HOOD_CONFIG_PATH, 'w') as fo:
@@ -582,15 +742,16 @@ def kill_file_check():
     else:
         print('Kill file missing - send flag to do_exit!!!')
     return do_exit
-    
+
+
+# def define_stock_lask10k_
+
 
 def define_stock_iex_key_facts(sk):
     return os.path.join(COMPANY_INFO_PATH, sk[:1].lower(), '_' + sk.lower() + '_iex_key_facts.json')
 
-
 def define_stock_iex_news(sk):
     return os.path.join(COMPANY_INFO_PATH, sk[:1].lower(), '_' + sk.lower() + '_news.json')
-
 
 def define_stock_iex_company_info(sk):
     return os.path.join(COMPANY_INFO_PATH, sk[:1].lower(), '_' + sk.lower() + '_iex_compnay_info.json')
@@ -598,10 +759,8 @@ def define_stock_iex_company_info(sk):
 def define_stock_rh_ratings(sk):
     return os.path.join(COMPANY_INFO_PATH, sk[:1].lower(), '_' + sk.lower() + '_rh_ratings.json')
 
-
 def define_stock_hist_path(sk):
     return os.path.join(HISTORY_PRICE_PATH, sk[:1].lower(), '_' + sk.lower() + '.csv')
-
 
 def get_stock_symbol_from_path(st_path):
     return os.path.basename(st_path)[1:].split('.')[0]
@@ -695,7 +854,7 @@ def stock_history_save(st_history):
             d_writer.writerow(history_data[date_code])
 
 
-def stock_history_load(hist_path):
+def stock_history_load(stock_symbol):
     """ 
     Load individual stock history files.
     input:
@@ -712,6 +871,7 @@ def stock_history_load(hist_path):
             'Jun':'06', 'Jul':'07', 'Aug':'08', 'Sep':'09', 'Oct':'10', 'Nov':'11', 'Dec':'12'}
         d_items = date_str.split('-')
         return int(d_items[2] + month_num_map[d_items[1]] + d_items[0])
+    hist_path = define_stock_hist_path(stock_symbol)
     d_reader_fields = []
     stock_historicals = {}
     fDE = os.path.isfile(hist_path)
@@ -786,60 +946,6 @@ def define_stock_price_bucket(org_close):
         return 'franklin'
     else:
         return 'large'
-
-
-def filter_me(my_stock):
-    """
-    This filter is designed to filter out some stocks that are lacking in data points
-    """
-    DESIRED_COUNTRIES_LIMIT = False
-    DESIRED_COUNTRIES = ['US', 'AU', '', None]
-    DESIRED_STOCK_ISSUE_TYPE_LIMIT = True
-    DESIRED_STOCK_ISSUE_TYPE = ['ps','cs', 'ad', 'si']
-    DESIRED_PRICE_BUCKET_LIMIT = True
-    DESIRED_PRICE_BUCKET = ['deca', 'dollar','penny', 'half']
-    NON_DESIRED_INDUSTRY_LIMIT = True
-    NON_DESIRED_INDUSTRY = ['Precious Metals', 'Steel', 'Aluminum', 'Coal']
-    MIN_HISTORY_LIMIT = False
-    MIN_HISTORY = 200
-    DIVIDEND_MIN_LIMIT = False
-    DIVIDEND_MIN = .001
-    PE_LIMIT = True
-    PE_MAX = 40
-    PE_MIN = -5
-    NEWS_LIMIT = True
-    NEWS_MIN = 20
-    filter_me = False
-    if my_stock['iex_unknown_symbol']:
-        filter_me = True
-    if my_stock['country'] not in DESIRED_COUNTRIES and DESIRED_COUNTRIES_LIMIT:
-        filter_me = True
-    if my_stock['issueType'] not in DESIRED_STOCK_ISSUE_TYPE and DESIRED_STOCK_ISSUE_TYPE_LIMIT:
-        filter_me = True
-    if my_stock['price_bucket'] not in DESIRED_PRICE_BUCKET and DESIRED_PRICE_BUCKET_LIMIT:
-        filter_me = True
-    if my_stock['datecode_count'] < MIN_HISTORY and MIN_HISTORY_LIMIT:
-        filter_me = True
-    if my_stock['industry'] in NON_DESIRED_INDUSTRY and NON_DESIRED_INDUSTRY_LIMIT:
-        filter_me = True
-    if my_stock['dividendYield'] < DIVIDEND_MIN and DIVIDEND_MIN_LIMIT:
-        filter_me = True
-    if (my_stock['peRatio'] < PE_MIN or my_stock['peRatio'] > PE_MAX) and PE_LIMIT:
-        filter_me = True
-    if my_stock['news_existing_ct'] < NEWS_MIN and NEWS_LIMIT:
-        filter_me = True
-    return filter_me
-
-
-def print_stock_news(stock_symbol):
-    news_items = iex_get_exising_news_items(stock_symbol)
-    for ni_k_ct, ni_k in enumerate(sorted(news_items)):
-        if ni_k_ct < 10:
-            news_item = news_items[ni_k]
-            print('\t' + epoch_to_human(news_item['datetime']) + '\t' +
-                news_item['headline'].encode("ascii", 'ignore').decode("ascii") + '\t' +
-                news_item['related']
-                )
 
 
 auto_traider_config_file_load()

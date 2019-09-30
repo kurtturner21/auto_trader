@@ -58,13 +58,11 @@ def evaluate_duplicates():
     The act of opening the data files with keys and saving them dedups the files. 
     """
     for st_ct, sk in enumerate(sorted(stocks)):
-        st_hist_path = at.define_stock_hist_path(sk)
-        st_history = at.stock_history_load(st_hist_path)
+        st_history = at.stock_history_load(sk)
         if st_ct % 1000 == 0: 
             st_history_datecode_count = len(st_history['history_data'].keys())
             stock_status_print_format_str = "{0:<5}{1:<10}{2:<100}day ct:{3:<5}"
-            print(stock_status_print_format_str.format(st_ct, sk, st_hist_path, 
-                st_history_datecode_count))
+            print(stock_status_print_format_str.format(st_ct, sk, st_history_datecode_count))
         at.stock_history_save(st_history)
         ### check break file not every loop, but every so often
         if st_ct % 10 == 0:
@@ -74,8 +72,7 @@ def evaluate_duplicates():
 
 def populate_buckets():
     for st_ct, sk in enumerate(sorted(stocks)):
-        st_hist_path = at.define_stock_hist_path(sk)
-        st_history = at.stock_history_load(st_hist_path)
+        st_history = at.stock_history_load(sk)
         st_hist_file_exists = st_history['file_exists']
         st_history_datecode_first = ''
         st_history_datecode_last = ''
@@ -130,7 +127,7 @@ def get_iex_comp_info():
 
 def get_iex_key_facts():
     global api_call_count
-    for sk in stocks:
+    for sk_ct, sk in enumerate(sorted(stocks)):
         sk_key_facts = {}
         sk_key_facts = at.iex_stock_get_key_facts(sk)
         if sk_key_facts['api_call']:
@@ -141,19 +138,16 @@ def get_iex_key_facts():
             at.sleep(5)
         # print(sk, sk_key_facts)
         stocks[sk].update({'iex_key_facts_epoch': sk_key_facts['latest_epoch']})
-        stocks[sk].update({'peRatio': sk_key_facts['data']['peRatio']})
-        stocks[sk].update({'dividendYield': sk_key_facts['data']['dividendYield']})
+        keys_to_update = ['peRatio','nextDividendDate','nextEarningsDate','dividendYield',
+            'day200MovingAvg','day50MovingAvg','week52high','week52low']
+        for ktu in keys_to_update:
+            if ktu in sk_key_facts['data']:
+                stocks[sk].update({ktu: sk_key_facts['data'][ktu]})
+        if sk_ct % 500 == 0:
+            print(sk_ct, ' running updates on get_iex_key_facts ', sk)
 
 
-def print_status(module_name, this_stime, overall_stime):
-    print('Time to process {0:<30} this: {1:<20}  overall: {2:<20}'.format(
-            module_name,
-            round(at.datetime.now().timestamp() - this_stime, 2), 
-            round(at.datetime.now().timestamp() - overall_stime, 2)
-            ))
-
-
-def check_last_time_ram(module_name):
+def check_last_time_ran(module_name):
     to_run = False
     last_time_ran = at.get_last_time_ran()
     last_time_epoch = last_time_ran[module_name]['last_time_epoch']
@@ -170,107 +164,11 @@ def check_last_time_ram(module_name):
 
 
 def cleaning_stock_data():
-    def flag_end_point(data):
-        is_end = False
-        for ky in ['companyName','marketcap','week52low','peRatio','employees','float']:
-            if ky in data:
-                is_end = True
-        return is_end
-    def find_the_last_jedi(data, lev=0):
-        the_last_jedi = {}
-        lev += 1
-        if len(data) > 1:
-            the_last_jedi = data
-        else:
-            k = list(data.keys())[0]
-            print(lev, k)
-            the_last_jedi = find_the_last_jedi(data[k], lev)
-        return the_last_jedi
-
-
-    ### lower case keys
-    # for st_ct, sk in enumerate(sorted(stocks)):
-    #     if sk[0] in string.ascii_uppercase:
-    #         new_lower_sk = sk.lower()
-    #         print(st_ct, sk, new_lower_sk, 'going lowercase...')
-    #         temp_stock_data = stocks.pop(sk)
-    #         stocks.update({new_lower_sk:temp_stock_data})
-
-
-    ### commented out on 09 22 2019
-    # import shutil
-    # for st_ct, sk in enumerate(sorted(stocks)):
-    #     stocks[sk] = at.kill_dict_key(stocks[sk], 'iex_company_info_path')
-    #     good_path = at.define_stock_iex_key_facts(sk)
-    #     bad_path = good_path.replace('facts.json', 'facts_2019_09.json')
-    #     # print(st_ct, sk, good_path)
-    #     ### find 2019_09 and move it
-    #     ### remove iex_key_facts_path from stocks and move file
-    #     if 'iex_key_facts_path' in stocks[sk]:
-    #         src_path = stocks[sk]['iex_key_facts_path']
-    #         if at.os.path.isfile(src_path):
-    #             shutil.move(src_path, good_path)
-    #         stocks[sk] = at.kill_dict_key(stocks[sk], 'iex_key_facts_path')
-    #         print('renaming a keyfacts file', bad_path)
-    #     good_path_de = at.os.path.isfile(good_path)
-    #     bad_path_de = at.os.path.isfile(bad_path)
-    #     if good_path_de and bad_path_de:
-    #         at.os.remove(bad_path)
-    #         print('removed bad path', bad_path)
-        
-        # if 'iex_key_facts_epoch' in stocks[sk]:
-        #     key_facts_data = {}
-        #     key_facts_epoch = stocks[sk]['iex_key_facts_epoch']
-        #     if at.os.path.isfile(good_path):
-        #         ### open file to check format.
-        #         with open(good_path, "r") as fi:
-        #             key_facts_data = at.json.load(fi)
-        #         # print(sk, len(key_facts_data), flag_end_point(key_facts_data))
-        #         if len(key_facts_data) == 1:
-        #             k = list(key_facts_data.keys())[0]
-        #             # print(sk, len(key_facts_data[k]), flag_end_point(key_facts_data[k]))
-        #             if len(key_facts_data[k]) > 1 and not flag_end_point(key_facts_data[k]):
-        #                 at.os.remove(good_path)
-        #                 stocks[sk]['iex_key_facts_epoch'] = 0
-        #                 print('removed a malformed dat.', good_path)
-        #         elif len(key_facts_data) > 1 and flag_end_point(key_facts_data):
-        #             new_key_facts = {key_facts_epoch : key_facts_data}
-        #             with open(good_path, 'w') as fo:
-        #                 at.json.dump(new_key_facts, fo, sort_keys=True, indent=4)
-        #         else:
-        #             k = list(key_facts_data.keys())[0]
-        #             if len(key_facts_data[k]) == 1:
-        #                 print('diving into jedis that are lost...')
-        #                 new_last_jedi_data = find_the_last_jedi(key_facts_data)
-        #                 new_key_facts = {key_facts_epoch : new_last_jedi_data}
-        #                 with open(good_path, 'w') as fo:
-        #                     at.json.dump(new_key_facts, fo, sort_keys=True, indent=4)
-                        
-    ### to remove stuff. 
-    # for st_ct, sk in enumerate(sorted(stocks)):
-    #     if at.os.path.isfile(at.define_stock_iex_key_facts(sk)):
-    #         at.os.remove(at.define_stock_iex_key_facts(sk))
-
-            
     # ### remove a key
-    for st_ct, sk in enumerate(sorted(stocks)):
+    for sk in sorted(stocks):
         stocks[sk] = at.kill_dict_key(stocks[sk], 'iex_news_epoch_pulled_last')
+        stocks[sk].update({'symbol': sk})
     
-
-    ### commented out on 09 22 2019
-    # tags_to_change = [
-    #     ['existing_news_ct', 'news_existing_ct'],
-    #     ['new_news_count', 'news_new_count'],
-    #     ['iex_company_info_effect_epoch', 'iex_news_epoch']
-    # ]
-    # for sk in stocks:
-    #     ### lower case a key
-    #     for ch_set in tags_to_change:
-    #         item_from, item_to = ch_set
-    #         if item_from in stocks[sk]:
-    #             item_temp_var = stocks[sk][item_from]
-    #             stocks[sk] = at.kill_dict_key(stocks[sk], item_from)
-    #             stocks[sk].update({item_to:item_temp_var})
 
 
 def get_iex_news():
@@ -283,8 +181,10 @@ def get_iex_news():
         days_sicne_last_api = 0
         run_api = True
         stocks[sk]['news_existing_ct'] = at.iex_get_exising_news_item_count(sk)    #Only needed once.
-        days_sicne_last_api = round(at.find_hours_since_epoch(stocks[sk]['iex_news_epoch'])/24, 3)
-        # if 'iex_news_epoch' in stocks[sk]:
+        if 'iex_news_epoch' in stocks[sk]:
+            days_sicne_last_api = round(at.find_hours_since_epoch(stocks[sk]['iex_news_epoch'])/24, 3)
+        else:
+            days_sicne_last_api = 10000
         if 'news_oldest_item_epoch' in stocks[sk]:
             if stocks[sk]['news_existing_ct'] > 0:
                 days_since_oldest_entry = at.find_hours_since_epoch(stocks[sk]['news_oldest_item_epoch']/1000)/24
@@ -374,50 +274,51 @@ def main():
     # cleaning_stock_data()
 
     this_stime = at.datetime.now().timestamp()
-    if check_last_time_ram('process_new_stock_data'):
+    if check_last_time_ran('process_new_stock_data'):
         process_new_stock_data()
         if TESTING:
             at.test_stock_data_file_save(stocks)
         else:
             at.stock_data_file_save(stocks)
-    print_status('process_new_stock_data', this_stime, overall_stime)
+    at.print_process_module_status('process_new_stock_data', this_stime, overall_stime)
     
     this_stime = at.datetime.now().timestamp()
-    if check_last_time_ram('evaluate_duplicates'):
+    if check_last_time_ran('evaluate_duplicates'):
         evaluate_duplicates()
         if TESTING:
             at.test_stock_data_file_save(stocks)
         else:
             at.stock_data_file_save(stocks)
-    print_status('evaluate_duplicates', this_stime, overall_stime)
+    at.print_process_module_status('evaluate_duplicates', this_stime, overall_stime)
 
     this_stime = at.datetime.now().timestamp()
-    if check_last_time_ram('populate_buckets'):
+    if check_last_time_ran('populate_buckets'):
         populate_buckets()
         if TESTING:
             at.test_stock_data_file_save(stocks)
         else:
             at.stock_data_file_save(stocks)
-    print_status('populate_buckets', this_stime, overall_stime)
+    at.print_process_module_status('populate_buckets', this_stime, overall_stime)
 
     this_stime = at.datetime.now().timestamp()
-    if check_last_time_ram('get_iex_comp_info'):
+    if check_last_time_ran('get_iex_comp_info'):
         get_iex_comp_info()
         if TESTING:
             at.test_stock_data_file_save(stocks)
         else:
             at.stock_data_file_save(stocks)
-    print_status('get_iex_comp_info', this_stime, overall_stime)
+    at.print_process_module_status('get_iex_comp_info', this_stime, overall_stime)
 
 
     this_stime = at.datetime.now().timestamp()
-    if check_last_time_ram('get_iex_key_facts'):
+    if check_last_time_ran('get_iex_key_facts'):
         get_iex_key_facts()
         if TESTING:
             at.test_stock_data_file_save(stocks)
         else:
             at.stock_data_file_save(stocks)
-    print_status('get_iex_key_facts', this_stime, overall_stime)
+    at.print_process_module_status('get_iex_key_facts', this_stime, overall_stime)
+    get_iex_key_facts()
 
     process_new_retings_data()
     get_iex_news()

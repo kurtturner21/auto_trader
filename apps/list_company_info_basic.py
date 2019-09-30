@@ -14,27 +14,10 @@ def list_all_company_info_basic():
     tags_ct = {}
     price_bucket_ct = {}
     found_by_filter_ct = 0
-    ### limit and filters
-    OVERALL_LIMIT = 200000         ### used for testing, if production set to over 10000
-    DISPLAY_LIMIT = 20000
-    DISPLAY_EVERY_NTH = 10
     ### starting to loop over stocks 
-    for sk_ct, sk in enumerate(sorted(stocks)):
-        try:
-            ### extracting from stocks 
-            sk_last_close = stocks[sk]['datecode_last_close']
-            sk_history_count = stocks[sk]['datecode_count']
-            sk_price_bucket = stocks[sk]['price_bucket']
-            sk_name = stocks[sk]['companyName']
-            sk_news_existing_ct = stocks[sk]['news_existing_ct']
-            ### filtering
-            if sk_ct > OVERALL_LIMIT:
-                continue
-            if at.filter_me(stocks[sk]):
-                continue
-        except:
-            print('something is broke with extraction: ', sk_ct, sk)
-            at.sys.exit(20)
+    for sk in sorted(stocks):
+        if at.filter_me(stocks[sk]):
+            continue
         ### counting up filterd rows. 
         found_by_filter_ct += 1
         for t_item in stocks[sk]['tags']:
@@ -54,25 +37,11 @@ def list_all_company_info_basic():
             issueType_ct[stocks[sk]['issueType']] += 1
         else:
             issueType_ct.update({stocks[sk]['issueType']:1})
-        if sk_price_bucket in price_bucket_ct:
-            price_bucket_ct[sk_price_bucket] += 1
+        if stocks[sk]['price_bucket'] in price_bucket_ct:
+            price_bucket_ct[stocks[sk]['price_bucket']] += 1
         else:
-            price_bucket_ct.update({sk_price_bucket:1})
-        ### display
-        if found_by_filter_ct < DISPLAY_LIMIT or found_by_filter_ct % DISPLAY_EVERY_NTH == 0:
-            stock_row_print_format = '{0:<6}{1:<10}{2:<10}{3:<10}{4:<30}{5:<10}{6:<30}{7:<25}{8:<5}{9:<5}{10:<8}{11:<10}{12:<10}'
-            try:
-                print(stock_row_print_format.format(found_by_filter_ct, sk, sk_last_close, sk_history_count, 
-                    sk_name[:28].encode("ascii", 'ignore').decode("ascii"), stocks[sk]['employees'], stocks[sk]['industry'][:28], 
-                    stocks[sk]['sector'][:23], stocks[sk]['issueType'], 
-                    stocks[sk]['country'], stocks[sk]['peRatio'], stocks[sk]['dividendYield'], sk_news_existing_ct))
-            except:
-                print('FAIL, at printing', sk_ct, sk)
-                at.sys.exit(20)
-        ### check break file not every loop, but every so often
-        if sk_ct % 10 == 0:
-            if at.kill_file_check():
-                break
+            price_bucket_ct.update({stocks[sk]['price_bucket']:1})
+        at.printing_stock_standard(found_by_filter_ct, stocks[sk], 'one')
     print('\nfound_by_filter_ct: ' + str(found_by_filter_ct))
     print('\ncountry_ct: ' + str(country_ct))
     print('\nissueType_ct:')
@@ -87,7 +56,6 @@ def list_all_company_info_basic():
     
 
 def main():
-    at.kill_file_touch()
     list_all_company_info_basic()
 
   

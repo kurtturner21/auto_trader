@@ -8,7 +8,7 @@ and save out a sample sub set.
 
 def create_test_set():
     REDUCE_SET = True
-    REDUCE_SET_TO = 100
+    REDUCE_SET_TO = 20
     stocks = at.stock_data_file_load()
     if REDUCE_SET_TO > len(stocks):
         REDUCE_SET_TO = len(stocks)

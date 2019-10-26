@@ -48,23 +48,26 @@ Time will take about 5 minutes.
 
 ## TODOs
 
-### 1.0
+### DONE
+- https://iexcloud.io/docs/api/#key-stats
+- https://iexcloud.io/docs/api/#news
+- Setup a stock picker based off of interchangeable models
+- http://www.robin-stocks.com/en/latest/
+- robin_stocks.stocks.get_ratings(symbol, info=None)[source]
+- Collabse "edo" & "iex" scripts down to one script.
+- https://iexcloud.io/docs/api/#symbols
+- remove current_and_usable from stocks data file.
+- Last10K. - CIK
 
-1. Pull down IEX
-- ~~https://iexcloud.io/docs/api/#key-stats~~
-- ~~https://iexcloud.io/docs/api/#news~~
-- https://iexcloud.io/docs/api/#splits
+### in progress
+
+
+### Want to do
+
+- https://iexcloud.io/docs/api/#historical-prices
+- Setup a purchase tester for the picker with tracking cost bases, profit and lose, wash purchase warning, trade/day ratio limit, etc.
+- Reporting on purchase history.
 - U.S. Holidays and Trading Dates
-- Earnings
-2. ~~Setup a stock picker based off of interchangeable models~~
-3. Setup a purchase tester for the picker with tracking cost bases, profit and lose, wash purchase warning, trade/day ratio limit, etc.
-4. Reporting on purchase history.
-5. ~~Interface with robinhood api~~
-- ~~http://www.robin-stocks.com/en/latest/~~
-
-### 1.1
-
-1. ~~Download analyist reports~~
-- ~~robin_stocks.stocks.get_ratings(symbol, info=None)[source]~~
-3. ~~Collabse "edo" & "iex" scripts down to one script.~~
-4. Intergarate data from Last10K.
+- Last10K. - Earnings
+- https://iexcloud.io/docs/api/#splits  PAID
+- https://iexcloud.io/docs/api/#price-target  PAID

@@ -9,19 +9,16 @@ from time import sleep
 from time import gmtime
 import time
 import robin_stocks as rhood
+import pandas as pd
+import math
 
 APP_BASE = os.path.join('c:' + os.sep, 'dev', 'auto_trader')
 DATA_FILES_BASE = os.path.join('c:' + os.sep, 'auto_trader_data')
 APP_CONFIG_DIR = os.path.join('c:' + os.sep, 'dev', 'auto_trader', 'etc')
 APP_KILL_FILE = os.path.join('c:' + os.sep, 'dev', 'auto_trader', 'etc', 'delete_me_to_stop_app.kill_file.txt')
 
-### EOD data files
-DOWNLOADED_HISTORY_PRICE_PATH = os.path.join(DATA_FILES_BASE, 'eod_data_files', 'downloaded')
-SYMBOL_PATH = os.path.join(DATA_FILES_BASE, 'eod_data_files', 'data_files', 'symbols')
-STOCK_DAT_FILES = ['AMEX.txt','NYSE.txt','NASDAQ.txt']
-
 ### compiled data
-HISTORY_PRICE_PROCESSED_LIST_PATH = os.path.join(DATA_FILES_BASE, 'etc', 'processed_dates.dat')
+MONTHLY_FRAMES_PATH = os.path.join(DATA_FILES_BASE, 'monthly_frames')
 HISTORY_PRICE_PATH = os.path.join(DATA_FILES_BASE, 'company_info')
 COMPANY_INFO_PATH = os.path.join(DATA_FILES_BASE, 'company_info')
 DATA_PATH = os.path.join(DATA_FILES_BASE, 'stocks_lists.json')
@@ -33,6 +30,7 @@ ROBIN_HOOD_CONFIG_PATH = os.path.join(DATA_FILES_BASE, 'etc', 'robin_hood_creds.
 
 ### Last10K
 LAST10K_CONFIG_PATH = os.path.join(DATA_FILES_BASE, 'etc', 'last10k_keys.json')
+LAST10K_BASE = 'https://services.last10k.com'
 
 ### IEX
 IEX_URL_BASE_PROD = 'https://cloud.iexapis.com/stable'      # production
@@ -66,36 +64,39 @@ def filter_me(stock_record):
     This filter is designed to filter out some stocks that are lacking in data points
     """
     try:
-        DESIRED_COUNTRIES_LIMIT = False
+        DESIRED_COUNTRIES_LIMIT = True
         DESIRED_COUNTRIES = ['US', 'AU', '', None]
         DESIRED_STOCK_ISSUE_TYPE_LIMIT = True
         DESIRED_STOCK_ISSUE_TYPE = ['ps','cs', 'ad', 'si']
-        DESIRED_PRICE_BUCKET_LIMIT = False
+        DESIRED_PRICE_BUCKET_LIMIT = True
         DESIRED_PRICE_BUCKET = ['deca', 'dollar','penny', 'half']
-        NON_DESIRED_INDUSTRY_LIMIT = False
+        NON_DESIRED_INDUSTRY_LIMIT = True
         NON_DESIRED_INDUSTRY = ['Precious Metals', 'Steel', 'Aluminum', 'Coal']
         MIN_HISTORY_LIMIT = True
         MIN_HISTORY = 200
         DIVIDEND_MIN_LIMIT = True
         DIVIDEND_MIN = .001
-        PE_LIMIT = False
-        PE_MAX = 40
+        PE_LIMIT = True
+        PE_MAX = 1000
         PE_MIN = -5
         NEWS_LIMIT = False
         NEWS_MIN = 20
         RH_RATING_LIMIT = True
-        RH_RATING_MIN = .95
+        RH_RATING_MIN = .9
         rh_rate_score = calculate_rating_score(stock_record)
         filter_me = False
-        if stock_record['iex_unknown_symbol']:
-            filter_me = True
+        # if stock_record['iex_unknown_symbol']:
+        #     filter_me = True
         if stock_record['country'] not in DESIRED_COUNTRIES and DESIRED_COUNTRIES_LIMIT:
             filter_me = True
         if stock_record['issueType'] not in DESIRED_STOCK_ISSUE_TYPE and DESIRED_STOCK_ISSUE_TYPE_LIMIT:
             filter_me = True
         if stock_record['price_bucket'] not in DESIRED_PRICE_BUCKET and DESIRED_PRICE_BUCKET_LIMIT:
             filter_me = True
-        if stock_record['datecode_count'] < MIN_HISTORY and MIN_HISTORY_LIMIT:
+        if 'h_count' in stock_record:
+            if stock_record['h_count'] < MIN_HISTORY and MIN_HISTORY_LIMIT:
+                filter_me = True
+        else:
             filter_me = True
         if stock_record['industry'] in NON_DESIRED_INDUSTRY and NON_DESIRED_INDUSTRY_LIMIT:
             filter_me = True
@@ -109,9 +110,117 @@ def filter_me(stock_record):
             filter_me = True
         return filter_me
     except:
-        print('FAIL: this stock failed the filtering process: ' + stock_record['symbol'])
+        print('FAIL: this stock failed the filter_me process: ' + str(stock_record))
         sys.exit(20)
 
+
+def filter_for_missing(stock_record):
+    """
+    This filter is designed to filter out some stocks that are lacking in data points
+    """
+    try:
+        DESIRED_STOCK_ISSUE_TYPE_LIMIT = False
+        DESIRED_STOCK_ISSUE_TYPE = ['ps','cs', 'ad', 'si']
+        MAX_HISTORY_LIMIT = True
+        MAX_HISTORY = 200
+        filter_me = False
+        if stock_record['issueType'] not in DESIRED_STOCK_ISSUE_TYPE and DESIRED_STOCK_ISSUE_TYPE_LIMIT:
+            filter_me = True
+        if stock_record['h_count'] > MAX_HISTORY:
+            filter_me = True
+        return filter_me
+    except:
+        print('FAIL: this stock failed the filter_for_missing process: ' + str(stock_record))
+        sys.exit(20)
+
+
+def filter_for_pulling_stock_histories(stock_record):
+    """
+    Include logic on what is the more disred stocks to keep up to date.
+    """
+    try:
+        DESIRED_COUNTRIES_LIMIT = True
+        DESIRED_COUNTRIES = ['US', 'AU', '', None]
+        DESIRED_STOCK_ISSUE_TYPE_LIMIT = False
+        DESIRED_STOCK_ISSUE_TYPE = ['ps','cs', 'ad', 'si']
+        DIVIDEND_MIN_LIMIT = True
+        DIVIDEND_MIN = .001
+        filter_me = False
+        if stock_record['country'] not in DESIRED_COUNTRIES and DESIRED_COUNTRIES_LIMIT:
+            filter_me = True
+        if stock_record['issueType'] not in DESIRED_STOCK_ISSUE_TYPE and DESIRED_STOCK_ISSUE_TYPE_LIMIT:
+            filter_me = True
+        if stock_record['dividendYield'] < DIVIDEND_MIN and DIVIDEND_MIN_LIMIT:
+            filter_me = True
+        return filter_me
+    except:
+        print('FAIL: this stock failed the filter_for_pulling_stock_histories process: ' + str(stock_record))
+        sys.exit(20)
+
+class sk_orders:
+    def __init__(self):
+        self.account = {
+            'cash_deposits_total': 0,
+            'cash': 0,
+            'buffer': 0,
+            'trades': {'Sale': 0, 'Buy': 0}
+        }
+        self.order_history = []
+        self.current_orders = {}
+    def add_money(self, amount=0):
+        self.account['cash'] += amount
+        self.account['cash_deposits_total'] += amount
+    def set_buffer(self, amount=0):
+        self.account['buffer'] += amount
+    def get_balance(self):
+        return self.account['cash']
+    def buy_stock(self, sk, buy_price, purchase_epoch):
+        self.current_orders.update({sk:
+                {
+                'sk': sk, 
+                'purchase_price': buy_price,
+                'purchase_epoch': purchase_epoch,
+                'sale_epoch': None,
+                'ownership_len': 0,
+                'share_count': int((self.account['cash']*.3 - self.account['buffer']) / buy_price),
+                'sale_price': None,
+                'profit': None
+            }})
+        self.account['cash'] = round(
+            self.account['cash'] - (self.current_orders[sk]['share_count'] * buy_price), 2)
+    def sale_stock(self, sk, sale_price, sale_epoch):
+        self.account['cash'] = round(
+            self.account['cash'] + (self.current_orders[sk]['share_count'] * sale_price), 2)
+        self.current_orders[sk]['sale_epoch'] = sale_epoch
+        self.current_orders[sk]['ownership_len'] = math.ceil(
+                (self.current_orders[sk]['sale_epoch'] - self.current_orders[sk]['purchase_epoch'])/3600/24)
+        self.current_orders[sk]['sale_price'] = round(sale_price, 2)
+        self.current_orders[sk]['profit'] = round((sale_price - self.current_orders[sk]['purchase_price']) * self.current_orders[sk]['share_count'], 2)
+        self.order_history.append(self.current_orders.pop(sk))
+    def current_profit(self, sk, sale_price):
+        return round((sale_price - self.current_orders[sk]['purchase_price']) * self.current_orders[sk]['share_count'], 2)
+    def current_invested(self, sk):
+        share_count = self.current_orders[sk]['share_count']
+        purchase_price = self.current_orders[sk]['purchase_price']
+        return round((share_count * purchase_price), 2)
+    def current_investment_prt(self):
+        for sk in self.current_orders:
+            share_count = self.current_orders[sk]['share_count']
+            purchase_price = self.current_orders[sk]['purchase_price']
+            ownership_days = math.ceil((datetime.now().timestamp() - self.current_orders[sk]['purchase_epoch'])/3600/24)
+            invested = round((share_count * purchase_price), 2)
+            profit = '' #round((sale_price - self.current_orders[sk]['purchase_price']) * self.current_orders[sk]['share_count'], 2)
+            print('stock:{0:<5} ct:{1:<5} profit:{2:<10} invested:{3:<10} days:{4:<4}  Still invested...'.format(
+                sk, share_count, profit, invested, ownership_days))
+    def order_history_prt(self):
+        for oh in self.order_history:
+            share_count = oh['share_count']
+            purchase_price = oh['purchase_price']
+            ownership_days = oh['ownership_len']
+            invested = round((share_count * purchase_price), 2)
+            profit = oh['profit']
+            print('stock:{0:<5} ct:{1:<5} profit:{2:<10} invested:{3:<10} days:{4:<4}'.format(oh['sk'], share_count, profit, invested, ownership_days))
+        
 
 #####
 # print constructors
@@ -119,8 +228,8 @@ def filter_me(stock_record):
 def printing_stock_standard(loop_num, stock_record, print_standard='one'):
     rh_rate_score = calculate_rating_score(stock_record)
     if print_standard == 'one':
-        stock_row_print_format = '{0:<6}{1:<10}{2:<10}{3:<10}{4:<30}{5:<10}{6:<30}{7:<25}{8:<5}{9:<5}{10:<8}{11:<10} news:{12:<10} rating:{13:<3}'
-        print_str = stock_row_print_format.format(loop_num, stock_record['symbol'], stock_record['datecode_last_close'], stock_record['datecode_count'], 
+        stock_row_print_format = '{0:<6}{1:<10}{2:<10}{3:<10}{4:<30}{5:<10}{6:<30}{7:<25}{8:<5}{9:<5}{10:<8}{11:<10} n:{12:<10} r:{13:<3}'
+        print_str = stock_row_print_format.format(loop_num, stock_record['symbol'], stock_record['h_close'], stock_record['h_count'], 
             stock_record['companyName'][:28].encode("ascii", 'ignore').decode("ascii"), stock_record['employees'], stock_record['industry'][:28], 
             stock_record['sector'][:23], stock_record['issueType'], 
             stock_record['country'], stock_record['peRatio'], stock_record['dividendYield'], stock_record['news_existing_ct'],
@@ -128,15 +237,15 @@ def printing_stock_standard(loop_num, stock_record, print_standard='one'):
             )
         print(print_str)
     elif print_standard == 'two':
+        stock_record['dividendYield']
         stock_row_print_format = '{0:<6}{1[symbol]:<5}{1[issueType]:<8}{1[country]:<10}{1[peRatio]:<10}{1[dividendYield]:<10} rating:{2:<3}'
         print_str = stock_row_print_format.format(loop_num, stock_record, rh_rate_score)
-        return print_str
         print(print_str)
 
 
 def calculate_rating_score(stock_record):
     rh_rate_score_divisor = (stock_record['rh_buy'] + stock_record['rh_hold'] + stock_record['rh_sell'])
-    if rh_rate_score_divisor > 0:
+    if rh_rate_score_divisor > 0 and stock_record['rh_error_code'] == 0:
         rh_rate_score = round(((stock_record['rh_buy'] * 1 + stock_record['rh_hold'] * .5 + stock_record['rh_sell'] * 0) /  rh_rate_score_divisor), 2)
     else:
         rh_rate_score = .2
@@ -217,12 +326,20 @@ def generate_effective_string():
     return str(datetime.now())
 
 
-def epoch_to_human(epoch_time):
+def epoch_to_human(epoch_time, str_format='%m/%d/%Y %H:%M:%S'):
     epoch_time_float = float(epoch_time)
     if len(str(int(epoch_time_float))) == 10:
-        return time.strftime('%m/%d/%Y %H:%M:%S',  gmtime(epoch_time_float))
+        return time.strftime(str_format,  gmtime(epoch_time_float))
     else:
-        return time.strftime('%m/%d/%Y %H:%M:%S',  gmtime(epoch_time_float/1000.))
+        return time.strftime(str_format,  gmtime(epoch_time_float/1000.))
+
+
+def human_to_epoch(human_time, str_format='%Y-%m-%d %H:%M:%S'):
+    """
+    expected format: '%Y-%m-%d %H:%M:%S'  STRING
+    example: 2019-10-11 00:00:00
+    """
+    return datetime.strptime(human_time, str_format).timestamp()
 
 
 #####
@@ -232,17 +349,19 @@ def create_stock_lists_stock(sk_symbol):
     return {
         "companyName": "",
         "exchange": "",
-        "historcials_file_exists": "",
         "iex_company_info_path": "",
         "iex_company_info_effect_epoch": 0,
         "iex_news_epoch": 0,
-        "current_and_usable": "",
-        "datecode_count": "",
-        "datecode_first": "",
-        "datecode_last": "",
-        "datecode_last_close": "",
         "price_bucket": "",
-        "industry": ""
+        "industry": "",
+        "h_source": "",
+        "tags": [],
+        "sector": "",
+        "country": "",
+        "issueType": "",
+        "employees": 0,
+        "dividendYield": 0.0,
+        "symbol": sk_symbol
     }
 
 
@@ -259,10 +378,43 @@ def create_rating_object():
     }
 
 
+def create_empty_stock_history():
+    # dt = datetime.today()
+    # index = pd.date_range(dt, periods=0, freq='D')
+    columns = ['Date','High','Low','Open','Close','Volume','Adj Close']
+    df_ = pd.DataFrame(columns=columns)
+    df_ = df_.set_index('Date')
+    df_ = df_.fillna(0) # with 0s rather than NaNs
+    return df_
+
+
 #####
 # LAST10k functions
 #####
 
+def last10k_load_key():
+    last10k_key = {}
+    if os.path.isfile(LAST10K_CONFIG_PATH):
+        with open(LAST10K_CONFIG_PATH, "r") as fi:
+            last10k_key = json.load(fi)
+    else:
+        print('file not found', LAST10K_CONFIG_PATH)
+    return last10k_key['key']
+
+
+
+def last10k_cik(this_sk_symbol):
+    last10k_key = last10k_load_key()
+    end_point = '/v1/company/'
+    end_point = '/v1/company/{0}/cik'.format(this_sk_symbol.upper())
+    headers = {'Ocp-Apim-Subscription-Key': last10k_key}
+    r_url = LAST10K_BASE + end_point
+    r = requests.get(r_url, headers=headers)
+    try:
+        return json.loads(r.text)
+    except:
+        print("WARNING LAST10K CIK CALL FAILED!!!", this_sk_symbol)
+        return 0
 
 
 #####
@@ -278,6 +430,36 @@ def r_login():
 def r_logout():
     robin_hood_config_file_save()
     rhood.authentication.logout()
+
+
+def r_get_portfolio_profile():
+    profile = rhood.profiles.load_portfolio_profile()
+    return profile
+
+
+def r_get_build_user_profile():
+    profile = rhood.account.build_user_profile()
+    return profile
+
+
+def r_get_stock_earnings(sk_symbol):
+    stock_earnings = rhood.stocks.get_earnings(sk_symbol)
+    return stock_earnings
+
+
+def r_get_stock_fundamentals(sk_symbol):
+    stock_fundamentals = rhood.stocks.get_fundamentals(sk_symbol)
+    return stock_fundamentals
+
+
+def r_get_stock_events(sk_symbol):
+    stock_events = rhood.stocks.get_events(sk_symbol)
+    return stock_events
+
+
+def r_get_stock_popularity(sk_symbol):
+    stock_popularity = rhood.stocks.get_popularity(sk_symbol)
+    return stock_popularity
 
 
 def r_get_ratings(sk_symbol):
@@ -341,6 +523,20 @@ def iex_load_tokens():
     else:
         print('file not found', IEX_TOKEN_PATHS)
     return iex_tokens
+
+
+
+def iex_symbols():
+    iex_tokens = iex_load_tokens()
+    end_point = '/ref-data/symbols'
+    r_url = IEX_URL_BASE_PROD + end_point + '?token=' + iex_tokens['production_secret'] 
+    try:
+        r = requests.get(r_url)
+        symbols = json.loads(r.text)
+        return symbols
+    except:
+        print("WARNING IEX SYMBOLS CALL FAILED!!!")
+
 
 
 def iex_account_metadata_display():
@@ -641,6 +837,12 @@ def iex_issue_type_code(issue_type):
         return 'Warrant'
     elif issue_type == 'rt':
         return 'Right'
+    elif issue_type == 'oef':
+        return 'Open Ended Fund'
+    elif issue_type == 'cef':
+        return 'Closed Ended Fund'
+    elif issue_type == 'ps':
+        return 'RiPreferred Stockght'
     else:
         return 'Not-Mapped'
 
@@ -653,11 +855,32 @@ def get_last_time_ran():
     global app_config
     return app_config['last_time_ran']
 
-
 def set_last_time_ran(last_time_ran):
     global app_config
     app_config['last_time_ran'] = last_time_ran
     auto_traider_config_file_save()
+
+def set_last10k_api_count_current(count):
+    global app_config
+    app_config['last10k_api_count_current'] = count
+    auto_traider_config_file_save()
+
+def get_last10k_api_count_current():
+    global app_config
+    return app_config['last10k_api_count_current']
+
+def get_last10k_api_count_max():
+    global app_config
+    return app_config['last10k_api_count_max']
+
+def set_last10k_api_count_month(month_code):
+    global app_config
+    app_config['last10k_api_count_month'] = month_code
+    auto_traider_config_file_save()
+
+def get_last10k_api_count_month():
+    global app_config
+    return app_config['last10k_api_count_month']
 
 
 def get_hours_to_collect_news_for_zeros():
@@ -685,6 +908,11 @@ def get_hours_between_iex_key_facts():
     return app_config['hours_between_iex_key_facts']
 
 
+def get_hours_between_history_close_dates():
+    global app_config
+    return app_config['hours_between_history_close_dates']
+
+
 #####
 # file based methods
 #####
@@ -700,19 +928,6 @@ def auto_traider_config_file_load():
     if os.path.isfile(AUTO_TRADER_CONFIG_PATH):
         with open(AUTO_TRADER_CONFIG_PATH, "r") as fi:
             app_config = json.load(fi)
-
-
-def last10k_config_file_save():
-    global last10k_config
-    with open(LAST10K_CONFIG_PATH, 'w') as fo:
-        json.dump(rb_config, fo, sort_keys=True, indent=4)
-
-
-def last10k_config_file_load():
-    global last10k_config
-    if os.path.isfile(LAST10K_CONFIG_PATH):
-        with open(LAST10K_CONFIG_PATH, "r") as fi:
-            last10k_config = json.load(fi)
 
 
 def robin_hood_config_file_save():
@@ -743,10 +958,6 @@ def kill_file_check():
         print('Kill file missing - send flag to do_exit!!!')
     return do_exit
 
-
-# def define_stock_lask10k_
-
-
 def define_stock_iex_key_facts(sk):
     return os.path.join(COMPANY_INFO_PATH, sk[:1].lower(), '_' + sk.lower() + '_iex_key_facts.json')
 
@@ -762,23 +973,11 @@ def define_stock_rh_ratings(sk):
 def define_stock_hist_path(sk):
     return os.path.join(HISTORY_PRICE_PATH, sk[:1].lower(), '_' + sk.lower() + '.csv')
 
+def define_monthly_frames_history_path(yyyy_mm_code):
+    return os.path.join(MONTHLY_FRAMES_PATH, yyyy_mm_code + '.csv')
+
 def get_stock_symbol_from_path(st_path):
     return os.path.basename(st_path)[1:].split('.')[0]
-
-
-def write_row_to_file(row_list, header_list, data_file):
-    def make_list_string(my_list):
-        new_list = []
-        for li in my_list:
-            new_list.append(str(li))
-        return new_list
-    fDE = os.path.isfile(data_file)
-    if not fDE:
-        print('Writing out new stock file: ' + data_file)
-        with open(data_file, 'w+') as fo:
-            fo.write(','.join(make_list_string(header_list)) + '\n')
-    with open(data_file, 'a') as fo:
-        fo.write(','.join(make_list_string(row_list)) + '\n')
 
 
 def make_dir_if_not_exists(file_path):
@@ -787,22 +986,6 @@ def make_dir_if_not_exists(file_path):
     if not isD:
         os.makedirs(dir_path)
         print('made directory:', dir_path)
-
-
-def history_dates_processed_save(history_price_processed):
-    with open(HISTORY_PRICE_PROCESSED_LIST_PATH, 'w') as fo:
-        fo.write('\n'.join(history_price_processed))
-    print('Processed histories saved:', len(history_price_processed))
-
-
-def history_dates_processed_load():
-    history_price_processed = set()
-    if os.path.isfile(HISTORY_PRICE_PROCESSED_LIST_PATH):
-        with open(HISTORY_PRICE_PROCESSED_LIST_PATH, "r") as fi:
-            for item in fi:
-                history_price_processed.add(item.strip())
-    print('Processed histories loaded:', len(history_price_processed))
-    return history_price_processed
 
 
 def stock_data_file_save(stocks):

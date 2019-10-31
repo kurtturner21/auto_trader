@@ -157,6 +157,7 @@ def filter_for_pulling_stock_histories(stock_record):
         print('FAIL: this stock failed the filter_for_pulling_stock_histories process: ' + str(stock_record))
         sys.exit(20)
 
+
 class sk_orders:
     def __init__(self):
         self.account = {
@@ -167,6 +168,18 @@ class sk_orders:
         }
         self.order_history = []
         self.current_orders = {}
+        self.options = {
+            'show_each_transaction': True,
+            'show_all_still_invested': True,
+        }
+    def show_each_transaction(self):
+        self.account['show_each_transaction'] = True
+    def hide_each_transaction(self):
+        self.account['show_each_transaction'] = False
+    def show_all_still_invested(self):
+        self.account['show_all_still_invested'] = True
+    def hide_all_still_invested(self):
+        self.account['show_all_still_invested'] = False
     def add_money(self, amount=0):
         self.account['cash'] += amount
         self.account['cash_deposits_total'] += amount
@@ -175,20 +188,31 @@ class sk_orders:
     def get_balance(self):
         return self.account['cash']
     def buy_stock(self, sk, buy_price, purchase_epoch):
-        self.current_orders.update({sk:
-                {
-                'sk': sk, 
-                'purchase_price': buy_price,
-                'purchase_epoch': purchase_epoch,
-                'sale_epoch': None,
-                'ownership_len': 0,
-                'share_count': int((self.account['cash']*.3 - self.account['buffer']) / buy_price),
-                'sale_price': None,
-                'profit': None
-            }})
-        self.account['cash'] = round(
-            self.account['cash'] - (self.current_orders[sk]['share_count'] * buy_price), 2)
+        share_count = int((
+            self.account['cash']*.5 - self.account['buffer']
+            ) / buy_price)
+        proposed_total = round(share_count * buy_price, 2)
+        if share_count > 10:
+            self.account['trades']['Buy'] += 1
+            self.current_orders.update({sk:
+                    {
+                    'sk': sk, 
+                    'purchase_price': buy_price,
+                    'purchase_epoch': purchase_epoch,
+                    'sale_epoch': None,
+                    'ownership_len': 0,
+                    'share_count': share_count,
+                    'sale_price': None,
+                    'profit': None
+                }})
+            self.account['cash'] = round(
+                self.account['cash'] - (self.current_orders[sk]['share_count'] * buy_price), 2)
+            if self.account['show_each_transaction']:
+                print('{0:<10} {1:<5} $:{2:<10} ct:{3:<10}  PURCHASE                              inv: {4}'.format(
+                    epoch_to_human(purchase_epoch), 
+                    sk, buy_price, share_count, proposed_total))
     def sale_stock(self, sk, sale_price, sale_epoch):
+        self.account['trades']['Sale'] += 1
         self.account['cash'] = round(
             self.account['cash'] + (self.current_orders[sk]['share_count'] * sale_price), 2)
         self.current_orders[sk]['sale_epoch'] = sale_epoch
@@ -196,6 +220,14 @@ class sk_orders:
                 (self.current_orders[sk]['sale_epoch'] - self.current_orders[sk]['purchase_epoch'])/3600/24)
         self.current_orders[sk]['sale_price'] = round(sale_price, 2)
         self.current_orders[sk]['profit'] = round((sale_price - self.current_orders[sk]['purchase_price']) * self.current_orders[sk]['share_count'], 2)
+        if self.account['show_each_transaction']:
+            print('{0:<10} {1:<5} $:{2:<10} ct:{3:<10}  SALE & Profit:{4:<10}   len:{5:<3}'.format(
+                epoch_to_human(sale_epoch), 
+                sk, sale_price, 
+                self.current_orders[sk]['share_count'], 
+                self.current_orders[sk]['profit'],
+                self.current_orders[sk]['ownership_len'])
+                )
         self.order_history.append(self.current_orders.pop(sk))
     def current_profit(self, sk, sale_price):
         return round((sale_price - self.current_orders[sk]['purchase_price']) * self.current_orders[sk]['share_count'], 2)
@@ -203,23 +235,41 @@ class sk_orders:
         share_count = self.current_orders[sk]['share_count']
         purchase_price = self.current_orders[sk]['purchase_price']
         return round((share_count * purchase_price), 2)
-    def current_investment_prt(self):
-        for sk in self.current_orders:
+    def current_investment_prt(self, close_epoch=datetime.now().timestamp(), mount_count=''):
+        print('\n {0:<5} current investments {1:<20}'.format(mount_count, epoch_to_human(close_epoch)))
+        total_investments = 0
+        total_len_ownership = 0
+        ct_owned = 0
+        for sk in sorted(self.current_orders):
+            ct_owned += 1
             share_count = self.current_orders[sk]['share_count']
             purchase_price = self.current_orders[sk]['purchase_price']
-            ownership_days = math.ceil((datetime.now().timestamp() - self.current_orders[sk]['purchase_epoch'])/3600/24)
+            ownership_days = math.ceil((close_epoch - self.current_orders[sk]['purchase_epoch'])/3600/24)
+            total_len_ownership += ownership_days
             invested = round((share_count * purchase_price), 2)
+            total_investments += invested
             profit = '' #round((sale_price - self.current_orders[sk]['purchase_price']) * self.current_orders[sk]['share_count'], 2)
-            print('stock:{0:<5} ct:{1:<5} profit:{2:<10} invested:{3:<10} days:{4:<4}  Still invested...'.format(
-                sk, share_count, profit, invested, ownership_days))
+            if self.account['show_all_still_invested']:
+                print('\tstock:{0:<5} ct:{1:<5} profit:{2:<10} invested:{3:<10} days:{4:<4}  Still invested...'.format(
+                    sk, share_count, profit, invested, ownership_days))
+        total_gain = round(total_investments + self.account['cash'] - self.account['cash_deposits_total'], 2)
+        if total_len_ownership_ct:
+            ownership_days_agv = round(total_len_ownership / ct_owned, 2)
+        else:
+            ownership_days_agv = 0
+        print('\ttotal deposits: {0:<20}     total_gain: {1:<10}   ownership_days_agv: {2:<5}  ct_owned:{3:<2}'.format(
+            self.account['cash_deposits_total'], total_gain, ownership_days_agv, ct_owned))
+        print('\ttotal_investments: {0:<20}   cash: {1:<20} trades: {2:<20}'.format(
+            round(total_investments,2), self.account['cash'], str(self.account['trades'])))
     def order_history_prt(self):
+        print('\norder history:')
         for oh in self.order_history:
             share_count = oh['share_count']
             purchase_price = oh['purchase_price']
             ownership_days = oh['ownership_len']
             invested = round((share_count * purchase_price), 2)
             profit = oh['profit']
-            print('stock:{0:<5} ct:{1:<5} profit:{2:<10} invested:{3:<10} days:{4:<4}'.format(oh['sk'], share_count, profit, invested, ownership_days))
+            print('\tstock:{0:<5} ct:{1:<5} profit:{2:<10} invested:{3:<10} days:{4:<4}'.format(oh['sk'], share_count, profit, invested, ownership_days))
         
 
 #####

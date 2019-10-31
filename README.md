@@ -61,11 +61,11 @@ Time will take about 5 minutes.
 
 ### in progress
 
+- Setup a purchase tester for the picker with tracking cost bases, profit and lose, wash purchase warning, trade/day ratio limit, etc.
 
 ### Want to do
 
 - https://iexcloud.io/docs/api/#historical-prices
-- Setup a purchase tester for the picker with tracking cost bases, profit and lose, wash purchase warning, trade/day ratio limit, etc.
 - Reporting on purchase history.
 - U.S. Holidays and Trading Dates
 - Last10K. - Earnings

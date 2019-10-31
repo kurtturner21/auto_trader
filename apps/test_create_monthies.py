@@ -7,6 +7,8 @@ AMT_OF_PROFIT = .1      ### percent of profit to gain before selling a stock
 AMT_OF_PERCENT_CHANGE_TO_BUY = .1  ### The slope of percent chnage before purchage can happen
 DAY_OF_PERCENT_GAIN = 30 ### the number of days for AMT_OF_PERCENT_CHANGE_TO_BUY to gain.  
 
+
+### create stks_to_gather to store into memory.
 TESTING = at.get_run_in_testing()
 if TESTING:
     stocks = at.test_stock_data_file_load()

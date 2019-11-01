@@ -3,7 +3,7 @@ import calendar
 import random
 
 MAX_LAST_LEN = 5        ### number of days to look at trends.  
-AMT_OF_PROFIT = .03      ### percent of profit to gain before selling a stock
+AMT_OF_PROFIT = .01      ### percent of profit to gain before selling a stock
 AMT_OF_PERCENT_CHANGE_TO_BUY = .2  ### The slope of percent chnage before purchage can happen
 DAY_OF_PERCENT_GAIN = 30 ### the number of days for AMT_OF_PERCENT_CHANGE_TO_BUY to gain.  
 
@@ -17,14 +17,14 @@ DAY_OF_PERCENT_GAIN = 30 ### the number of days for AMT_OF_PERCENT_CHANGE_TO_BUY
 my_account = at.sk_orders()
 my_account.add_money(1000.00)
 my_account.set_buffer(100.00)
-my_account.hide_each_transaction()
+# my_account.hide_each_transaction()
 my_account.hide_all_still_invested()
 print('Starting cash: ', my_account.account['cash'])
 
 loops = 0
 cash_deposits = 200
 starting_year = random.randint(2000, 2018)
-running_years = random.randint(5,18)
+running_years = random.randint(1,2)
 total_profit = 0
 
 close_epoch = None

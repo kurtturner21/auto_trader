@@ -492,6 +492,11 @@ def r_get_build_user_profile():
     return profile
 
 
+def r_get_bank_transfers():
+    profile = rhood.account.get_bank_transfers()
+    return profile
+
+
 def r_get_stock_earnings(sk_symbol):
     stock_earnings = rhood.stocks.get_earnings(sk_symbol)
     return stock_earnings

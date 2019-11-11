@@ -19,7 +19,6 @@ def review_history():
         at.print_stock_history(sk, days_into_past=10, to_reverse=False)
         at.print_stock_history(sk, days_into_past=10, to_reverse=True)
         print(stocks[sk])
-        at.get_sh_52_week_numbers(st_history_data['history_data'])
 
 
 

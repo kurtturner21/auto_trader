@@ -21,12 +21,14 @@ APP_KILL_FILE = os.path.join('c:' + os.sep, 'dev', 'auto_trader', 'etc', 'delete
 MONTHLY_FRAMES_PATH = os.path.join(DATA_FILES_BASE, 'monthly_frames')
 HISTORY_PRICE_PATH = os.path.join(DATA_FILES_BASE, 'company_info')
 COMPANY_INFO_PATH = os.path.join(DATA_FILES_BASE, 'company_info')
+DOCUMENTS_DOWNLOAD_PATH = os.path.join(DATA_FILES_BASE, 'documents_stor')
 DATA_PATH = os.path.join(DATA_FILES_BASE, 'stocks_lists.json')
 DATA_PATH_TEST = os.path.join(DATA_FILES_BASE, 'stocks_lists_test.json')
 AUTO_TRADER_CONFIG_PATH = os.path.join(DATA_FILES_BASE, 'etc', 'auto_trader_config.json')
 
 ### Robin hood
 ROBIN_HOOD_CONFIG_PATH = os.path.join(DATA_FILES_BASE, 'etc', 'robin_hood_creds.json')
+ROBIN_HOOD_URL_BASE_PROD = 'https://api.robinhood.com'      # production
 
 ### Last10K
 LAST10K_CONFIG_PATH = os.path.join(DATA_FILES_BASE, 'etc', 'last10k_keys.json')
@@ -163,7 +165,11 @@ class sk_orders:
         self.account = {
             'cash_deposits_total': 0,
             'cash': 0,
+            'total_gain': 0,
+            'ownership_days_agv': 0,
+            'ct_owned': 0,
             'buffer': 0,
+            'total_investments': 0,
             'trades': {'Sale': 0, 'Buy': 0}
         }
         self.order_history = []
@@ -172,6 +178,16 @@ class sk_orders:
             'show_each_transaction': True,
             'show_all_still_invested': True,
         }
+        self.trans_logic_setting = {
+            'MAX_LAST_LEN': 5,
+            'AMT_OF_PROFIT': .01,
+            'AMT_OF_PERCENT_CHANGE_TO_BUY': .2,
+            'DAY_OF_PERCENT_GAIN': 30
+        }
+    def set_amt_of_profit_requried_to_sale(self, amt_of_profit):
+        self.trans_logic_setting['AMT_OF_PROFIT'] = amt_of_profit
+    def set_amt_of_percent_change_to_buy(self, amnt_of_percent):
+        self.trans_logic_setting['AMT_OF_PERCENT_CHANGE_TO_BUY'] = amnt_of_percent
     def show_each_transaction(self):
         self.options['show_each_transaction'] = True
     def hide_each_transaction(self):
@@ -187,6 +203,18 @@ class sk_orders:
         self.account['buffer'] += amount
     def get_balance(self):
         return self.account['cash']
+    def stock_logic_one(self, close_date, close_epoch, sk_symbol, stock_data):
+        r_close = round(stock_data['Adj Close'], 2)
+        r_nma= round(stock_data['nma'], 2)
+        r_pct = round(stock_data['pct'], 2)
+        if sk_symbol not in self.current_orders and r_close < r_nma and r_pct > self.trans_logic_setting['AMT_OF_PERCENT_CHANGE_TO_BUY']:
+            if self.account['cash'] > (self.account['buffer'] + r_close):
+                self.buy_stock(sk_symbol, r_close, close_epoch)
+        elif sk_symbol in self.current_orders:
+            s_invested = self.current_invested(sk_symbol)
+            s_profit = self.current_profit(sk_symbol, r_close)
+            if s_profit > (s_invested * self.trans_logic_setting['AMT_OF_PROFIT']):
+                self.sale_stock(sk_symbol, r_close, close_epoch)
     def buy_stock(self, sk, buy_price, purchase_epoch):
         share_count = int((
             self.account['cash']*.5 - self.account['buffer']
@@ -229,6 +257,7 @@ class sk_orders:
                 self.current_orders[sk]['ownership_len'])
                 )
         self.order_history.append(self.current_orders.pop(sk))
+
     def current_profit(self, sk, sale_price):
         return round((sale_price - self.current_orders[sk]['purchase_price']) * self.current_orders[sk]['share_count'], 2)
     def current_invested(self, sk):
@@ -257,6 +286,10 @@ class sk_orders:
             ownership_days_agv = round(total_len_ownership / ct_owned, 2)
         else:
             ownership_days_agv = 0
+        self.account['total_gain'] = total_gain
+        self.account['ownership_days_agv'] = ownership_days_agv
+        self.account['ct_owned'] = ct_owned
+        self.account['total_investments'] = round(total_investments,2)
         print('\ttotal deposits: {0:<20}     total_gain: {1:<10}   ownership_days_agv: {2:<5}  ct_owned:{3:<2}'.format(
             self.account['cash_deposits_total'], total_gain, ownership_days_agv, ct_owned))
         print('\ttotal_investments: {0:<20}  cash: {1:<18} trades: {2:<20}'.format(
@@ -329,29 +362,6 @@ def print_stock_history(stock_symbol, days_into_past=10, to_reverse=True):
     for sk_h_ct, sk_h in enumerate(sorted(st_history_data['history_data'], reverse=to_reverse)):
         if sk_h_ct < 10:
             print(sk_h, st_history_data['history_data'][sk_h])
-
-
-#####
-# stock history functions
-#####
-
-def get_sh_52_week_numbers(stock_history):
-    # one year of seconds 31536000
-    one_year_epoch = generate_effective_epoch() - 31471200
-    one_year_datecode = int(time.strftime('%Y%m%d',  gmtime(one_year_epoch)))
-    high_52 = 0
-    low_52 = 0
-    for dt_code in sorted(stock_history, reverse=True):
-        if dt_code >= one_year_datecode:
-            cur_dt_high = stock_history[dt_code]['High']
-            cur_dt_low = stock_history[dt_code]['Low']
-            cur_dt_close = stock_history[dt_code]['Close']
-            if cur_dt_high > high_52:
-                high_52 = cur_dt_high
-                print(dt_code, high_52, low_52)
-            if cur_dt_low < low_52 or low_52 == 0:
-                low_52 = cur_dt_low
-                print(dt_code, high_52, low_52)
 
 
 #####
@@ -485,6 +495,17 @@ def r_logout():
 def r_get_portfolio_profile():
     profile = rhood.profiles.load_portfolio_profile()
     return profile
+
+
+# def r_get_account_documents():
+#     return rhood.account.get_documents()
+
+# def r_get_account_download_document(url, name, dirpath, fileext='pdf'):
+#     r = requests.get(url)
+#     f_path = os.path.join(dirpath, name)  + '.' + fileext
+#     with open(f_path, 'wb') as fo:
+#         fo.write(r.content)
+#     # profile = rhood.account.download_document(url, name, dirpath)
 
 
 def r_get_build_user_profile():
@@ -1031,8 +1052,17 @@ def define_stock_hist_path(sk):
 def define_monthly_frames_history_path(yyyy_mm_code):
     return os.path.join(MONTHLY_FRAMES_PATH, yyyy_mm_code + '.csv')
 
+def define_monthly_eval_report_path():
+    return os.path.join(MONTHLY_FRAMES_PATH, 'report.csv')
+
 def get_stock_symbol_from_path(st_path):
     return os.path.basename(st_path)[1:].split('.')[0]
+
+def get_document_stor_account_statements():
+    return os.path.join(DOCUMENTS_DOWNLOAD_PATH, 'account_statements')
+
+def get_document_stor_trade_confirm():
+    return os.path.join(DOCUMENTS_DOWNLOAD_PATH, 'trade_confirm')
 
 
 def make_dir_if_not_exists(file_path):

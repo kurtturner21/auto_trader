@@ -63,6 +63,10 @@ Time will take about 5 minutes.
 
 - Setup a purchase tester for the picker with tracking cost bases, profit and lose, wash purchase warning, trade/day ratio limit, etc.
 
+### bugs
+
+- When testing mode, the new stocks will download when not in testing group.
+
 ### Want to do
 
 - https://iexcloud.io/docs/api/#historical-prices

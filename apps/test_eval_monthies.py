@@ -11,19 +11,28 @@ import random
 NUMBER_OF_RUNS = 100
 at.kill_file_touch()
 
-def save_data_to_file(mydata):
+def save_data_to_file(mydata, account_history):
     fieldnames = sorted(mydata[0].keys())
-    with open(at.define_monthly_eval_report_path(), 'w', newline='\n') as csvfile:
+    with open(at.define_eval_monthlies_report_path(), 'w', newline='\n') as csvfile:
         d_writer = at.csv.DictWriter(csvfile, fieldnames=fieldnames)
         d_writer.writeheader()
         for data_row in mydata:
             d_writer.writerow(data_row)
+    if account_history:
+        fieldnames = sorted(account_history[0].keys())
+        with open(at.define_eval_monthlies_transactions_path(), 'w', newline='\n') as csvfile:
+            d_writer = at.csv.DictWriter(csvfile, fieldnames=fieldnames)
+            d_writer.writeheader()
+            for data_row in account_history:
+                d_writer.writerow(data_row)
+
 
 my_monthly_eval = []
-
+my_monthly_eval_trans_history = []
 for run_num in range(NUMBER_OF_RUNS):
     print("\n################# STARTING RUN {0} ######################".format(run_num))
     my_account = at.sk_orders()
+    my_account.set_iteration_run(run_num)
     my_account.add_money(1000.00)
     my_account.set_buffer(100.00)
     my_account.set_amt_of_profit_requried_to_sale(round(random.random() * .5, 3))
@@ -73,7 +82,7 @@ for run_num in range(NUMBER_OF_RUNS):
                 'loops': loops,
                 'date_start': date_start,
                 'amt_of_profit_for_sale': my_account.trans_logic_setting['AMT_OF_PROFIT'],
-                'amnt_of_percent_slope_to_buy': my_account.trans_logic_setting['AMT_OF_PERCENT_CHANGE_TO_BUY'],
+                'amt_of_percent_slope_to_buy': my_account.trans_logic_setting['AMT_OF_PERCENT_CHANGE_TO_BUY'],
                 'cash': my_account.account['cash'],
                 'cash_deposits_total': my_account.account['cash_deposits_total'],
                 'total_gain': my_account.account['total_gain'],
@@ -83,12 +92,17 @@ for run_num in range(NUMBER_OF_RUNS):
                 'trades_sale': my_account.account['trades']['Sale'],
                 'trades_buy': my_account.account['trades']['Buy']
             })
-            save_data_to_file(my_monthly_eval)
+            save_data_to_file(my_monthly_eval, my_monthly_eval_trans_history)
             if at.kill_file_check():
                 break
         # at.sleep(5)
         if at.kill_file_check():
             break
+    if my_account.order_history:
+        my_monthly_eval_trans_history += my_account.order_history
+    for sk in my_account.current_orders:
+        my_monthly_eval_trans_history.append(my_account.current_orders[sk])
+    save_data_to_file(my_monthly_eval, my_monthly_eval_trans_history)
     print('Trading Months: ' + str(loops))
     print('Ending cash', my_account.account['cash'])
     # print('total_profit ', round(total_profit, 2))

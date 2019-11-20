@@ -170,7 +170,8 @@ class sk_orders:
             'ct_owned': 0,
             'buffer': 0,
             'total_investments': 0,
-            'trades': {'Sale': 0, 'Buy': 0}
+            'trades': {'Sale': 0, 'Buy': 0},
+            'iteration': None
         }
         self.order_history = []
         self.current_orders = {}
@@ -184,6 +185,8 @@ class sk_orders:
             'AMT_OF_PERCENT_CHANGE_TO_BUY': .2,
             'DAY_OF_PERCENT_GAIN': 30
         }
+    def set_iteration_run(self, int_run_num):
+        self.account['iteration'] = int_run_num
     def set_amt_of_profit_requried_to_sale(self, amt_of_profit):
         self.trans_logic_setting['AMT_OF_PROFIT'] = amt_of_profit
     def set_amt_of_percent_change_to_buy(self, amnt_of_percent):
@@ -231,7 +234,10 @@ class sk_orders:
                     'ownership_len': 0,
                     'share_count': share_count,
                     'sale_price': None,
-                    'profit': None
+                    'profit': None,
+                    'amt_of_pct_gain_2buy':  self.trans_logic_setting['AMT_OF_PERCENT_CHANGE_TO_BUY'],
+                    'amt_of_proft_gain_2sale': self.trans_logic_setting['AMT_OF_PROFIT'],
+                    'int_run_num': self.account['iteration']
                 }})
             self.account['cash'] = round(
                 self.account['cash'] - (self.current_orders[sk]['share_count'] * buy_price), 2)
@@ -1052,8 +1058,11 @@ def define_stock_hist_path(sk):
 def define_monthly_frames_history_path(yyyy_mm_code):
     return os.path.join(MONTHLY_FRAMES_PATH, yyyy_mm_code + '.csv')
 
-def define_monthly_eval_report_path():
-    return os.path.join(MONTHLY_FRAMES_PATH, 'report.csv')
+def define_eval_monthlies_report_path():
+    return os.path.join(MONTHLY_FRAMES_PATH, 'eval_monthlies_report.csv')
+
+def define_eval_monthlies_transactions_path():
+    return os.path.join(MONTHLY_FRAMES_PATH, 'eval_monthlies_transactions.csv')
 
 def get_stock_symbol_from_path(st_path):
     return os.path.basename(st_path)[1:].split('.')[0]

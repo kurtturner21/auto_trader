@@ -79,9 +79,11 @@ def process_stock_histories():
             if at.kill_file_check():
                 break
         if sleep_batch_count > 1000:
-            print('process_new_stock_data: sleep batch hit!!!' + str(sleep_batch_count))
+            print('process_new_stock_data: sleep batch hit!!! ' + str(sleep_batch_count))
             sleep_batch_count = 0
             at.sleep(5)
+        # if sk_ct > 10:           #### testing
+        #     break
         sk_file = at.define_stock_hist_path(sk)
         sk_file_de = at.os.path.isfile(sk_file)
         df_existing = at.create_empty_stock_history()
@@ -132,33 +134,25 @@ def process_stock_histories():
         # continue                ### testing
         stocks[sk].update({ 'h_count': int(history_count) })
         ### normalize it
-        df_existing['30ma'] =  df_existing['Adj Close'].rolling(window=30, min_periods=0).mean()
-        df_existing['100ma'] =  df_existing['Adj Close'].rolling(window=100, min_periods=0).mean()
-        df_existing['200ma'] =  df_existing['Adj Close'].rolling(window=200, min_periods=0).mean()
-        df_existing = df_existing.round({
-            'Open': 3, 
-            'High': 3, 
-            'Low': 3, 
-            'Adj Close': 3, 
-            'Close': 3,
-            '30ma': 3,
-            '100ma': 3,
-            '200ma': 3
-            })
+        df_existing['5ma'] =  round(df_existing['Adj Close'].rolling(window=5, min_periods=0).mean(),3)
+        df_existing['10ma'] =  round(df_existing['Adj Close'].rolling(window=10, min_periods=0).mean(),3)
+        df_existing['30ma'] =  round(df_existing['Adj Close'].rolling(window=30, min_periods=0).mean(),3)
+        df_existing['100ma'] =  round(df_existing['Adj Close'].rolling(window=100, min_periods=0).mean(),3)
+        df_existing['200ma'] =  round(df_existing['Adj Close'].rolling(window=200, min_periods=0).mean(),3)
+        df_existing = df_existing.round({'Open': 3, 'High': 3, 'Low': 3, 'Adj Close': 3, 'Close': 3})
         ### update stock data
         if df_existing['Open'].count() > 0:
             sk_his_close = df_existing.loc[df_existing.index[-1]]['Close']
+            stocks[sk].update({ 'h_source': 'yahoo' })
             stocks[sk].update({ 'price_bucket': at.define_stock_price_bucket(sk_his_close) })
             stocks[sk].update({ 'h_30ma': df_existing.loc[df_existing.index[-1]]['30ma'] })
             stocks[sk].update({ 'h_100ma': df_existing.loc[df_existing.index[-1]]['100ma'] })
             stocks[sk].update({ 'h_200ma': df_existing.loc[df_existing.index[-1]]['200ma'] })
             stocks[sk].update({ 'h_close': float(sk_his_close) })
-            stocks[sk].update({ 'h_source': 'yahoo' })
             stocks[sk].update({ 'h_close_date': at.human_to_epoch(str(df_existing.index[-1])) })
         else:
             if 'h_source' not in stocks[sk]:
                 stocks[sk].update({ 'h_source': '' })
-            if stocks[sk]['h_source'] == '':
                 stocks[sk].update({ 'price_bucket': '' })
                 stocks[sk].update({ 'h_30ma': 0 })
                 stocks[sk].update({ 'h_100ma': 0 })
@@ -180,6 +174,7 @@ def process_stock_histories():
     print('passed_on_no_new_data: ' + str(passed_on_no_new_data))
     print('downloaded_history_count: ' + str(downloaded_history_count))
     print('overall new histories added: ' + str(new_history_count_oa))
+    
                 
 def get_iex_comp_info():
     global api_call_count
@@ -361,8 +356,8 @@ def process_new_ratings_data():
                 continue
         diff_in_hours = 10000
         if 'rh_api_epoch' in stocks[sk]:
-            diff_in_hours = (at.datetime.now().timestamp() - stocks[sk]['rh_api_epoch']) / 60 / 60
-        if diff_in_hours > 72:
+            diff_in_hours = round((at.datetime.now().timestamp() - stocks[sk]['rh_api_epoch']) / 60 / 60, 2)
+        if diff_in_hours > 12:
             update_sks += 1
             rh_ratings = at.r_get_ratings(sk)
             stocks[sk].update({'rh_hold': rh_ratings['hold']})
@@ -390,13 +385,17 @@ def main():
     at.iex_unknown_symbols_load()
     at.kill_file_touch()
     print('-----------------app started--------------------')
-    process_new_ratings_data()
     cleaning_stock_data()
 
     this_stime = at.datetime.now().timestamp()
     if check_last_time_ran('get_iex_new_symbols'):
         get_iex_new_symbols()
     at.print_process_module_status('get_iex_new_symbols', this_stime, overall_stime)
+
+    this_stime = at.datetime.now().timestamp()
+    # if check_last_time_ran('process_new_ratings_data'):
+    process_new_ratings_data()
+    at.print_process_module_status('process_new_ratings_data', this_stime, overall_stime)
 
     this_stime = at.datetime.now().timestamp()
     if check_last_time_ran('process_stock_histories'):
@@ -416,7 +415,9 @@ def main():
     
     get_iex_key_facts()
     get_iex_news()
-    get_cik_with_last10k()
+
+
+    # get_cik_with_last10k()    CONNECTION ERRORS
 
     ### build indexes
     ### score news

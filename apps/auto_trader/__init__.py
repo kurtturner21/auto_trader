@@ -76,7 +76,7 @@ def filter_me(stock_record):
         NON_DESIRED_INDUSTRY = ['Precious Metals', 'Steel', 'Aluminum', 'Coal']
         MIN_HISTORY_LIMIT = True
         MIN_HISTORY = 200
-        DIVIDEND_MIN_LIMIT = True
+        DIVIDEND_MIN_LIMIT = False
         DIVIDEND_MIN = .001
         PE_LIMIT = True
         PE_MAX = 1000
@@ -104,9 +104,15 @@ def filter_me(stock_record):
             filter_me = True
         if stock_record['dividendYield'] < DIVIDEND_MIN and DIVIDEND_MIN_LIMIT:
             filter_me = True
-        if (stock_record['peRatio'] < PE_MIN or stock_record['peRatio'] > PE_MAX) and PE_LIMIT:
+        if 'peRatio' in stock_record:
+            if (stock_record['peRatio'] < PE_MIN or stock_record['peRatio'] > PE_MAX) and PE_LIMIT:
+                filter_me = True
+        else:
             filter_me = True
-        if stock_record['news_existing_ct'] < NEWS_MIN and NEWS_LIMIT:
+        if 'news_existing_ct' in stock_record:
+            if stock_record['news_existing_ct'] < NEWS_MIN and NEWS_LIMIT:
+                filter_me = True
+        else:
             filter_me = True
         if rh_rate_score < RH_RATING_MIN and RH_RATING_LIMIT:
             filter_me = True
@@ -502,16 +508,38 @@ def r_get_portfolio_profile():
     profile = rhood.profiles.load_portfolio_profile()
     return profile
 
-
+### DON'T WORK
 # def r_get_account_documents():
 #     return rhood.account.get_documents()
 
+### DON'T WORK
 # def r_get_account_download_document(url, name, dirpath, fileext='pdf'):
 #     r = requests.get(url)
 #     f_path = os.path.join(dirpath, name)  + '.' + fileext
 #     with open(f_path, 'wb') as fo:
 #         fo.write(r.content)
 #     # profile = rhood.account.download_document(url, name, dirpath)
+
+
+def r_get_stock_cancel_order(cancel_url):
+    return rhood.helper.request_post(cancel_url)
+
+def r_post_create_order(sk_symbol, tg_price, tg_qty):
+    # gtc = good till cancelled
+    return rhood.orders.order(
+        sk_symbol, tg_qty, orderType='limit', trigger='immediate', 
+        side='sell', limitPrice=tg_price, stopPrice=tg_price, 
+        timeInForce='gtc', extendedHours=False)
+
+
+def r_get_orders_for_symbol(needed_symbol):
+    symbol_orders = rhood.orders.find_orders(symbol=needed_symbol)
+    return symbol_orders
+
+
+def r_get_build_user_holdings():
+    holdings = rhood.account.build_holdings()
+    return holdings
 
 
 def r_get_build_user_profile():
